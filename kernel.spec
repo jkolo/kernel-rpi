@@ -71,7 +71,7 @@
 # For non-released -rc kernels, this will be appended after the rcX and
 # gitX tags, so a 3 here would become part of release "0.rcX.gitX.3"
 #
-%global baserelease 1
+%global baserelease 2
 
 # RaspberryPi foundation git snapshot (short)
 %global rpi_gitshort 3cf556892
@@ -239,7 +239,8 @@
 # Packages that need to be installed before the kernel is, because the %%post
 # scripts use them.
 #
-%define kernel_prereq  coreutils, systemd, grubby
+# grubby removed: RHCOS/ostree uses BLS entries, not grubby
+%define kernel_prereq  coreutils, systemd
 %define initrd_prereq  dracut
 
 
@@ -420,7 +421,7 @@ Provides: kernel-uname-r = %{KVERREL}%{?1:+%{1}}\
 Requires(pre): %{kernel_prereq}\
 Requires(pre): %{initrd_prereq}\
 Suggests: linux-firmware\
-Requires(pre): bcm283x-firmware\
+# bcm283x-firmware removed: firmware handled separately (EEPROM on RPi5, Containerfile for DTBs)\
 Requires(preun): systemd\
 Conflicts: xorg-x11-drv-vmmouse\
 %{expand:%%{?kernel%{?1:_%{1}}_conflicts:Conflicts: %%{kernel%{?1:_%{1}}_conflicts}}}\
@@ -1684,6 +1685,10 @@ fi
 
 
 %changelog
+* Thu Apr 10 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.21-2.rpi
+- Remove grubby from kernel_prereq (RHCOS/ostree uses BLS, not grubby)
+- Remove bcm283x-firmware Requires (firmware handled in Containerfile/EEPROM)
+
 * Thu Apr 10 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.21-1.rpi
 - Fork from dwrobel/kernel dw-6.12.y, rebased to kernel 6.18.y
 - Update to stable kernel patch v6.18.21
