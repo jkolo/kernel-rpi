@@ -74,7 +74,7 @@
 %global baserelease 1
 
 # RaspberryPi foundation git snapshot (short)
-%global rpi_gitshort 42c8bbfa4
+%global rpi_gitshort 3cf556892
 
 %global build_release %{baserelease}
 
@@ -118,13 +118,13 @@
 # base_sublevel is the kernel version we're starting with and patching
 # on top of -- for example, 3.1-rc7-git1 starts with a 3.0 base,
 # which yields a base_sublevel of 0.
-%define base_sublevel 12
+%define base_sublevel 18
 
 ## If this is a released kernel ##
 %if 0%{?released_kernel}
 
 # Do we have a -stable update to apply?
-%define stable_update 73
+%define stable_update 21
 
 # Set rpm version accordingly
 %if 0%{?stable_update}
@@ -1684,6 +1684,21 @@ fi
 
 
 %changelog
+* Thu Apr 10 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.21-1.rpi
+- Fork from dwrobel/kernel dw-6.12.y, rebased to kernel 6.18.y
+- Update to stable kernel patch v6.18.21
+- Sync RPi patch to rpi-6.18.y git revision: 3cf556892848ecd4f7a322d04edd2ea2c0ae127b
+- Update config-bcm27xx.cfg for kernel 6.18 Kconfig changes:
+  - Remove SECURITY_SELINUX_BOOTPARAM_VALUE (removed in 5.6)
+  - Remove SECURITY_SELINUX_CHECKREQPROT_VALUE (removed in 6.4)
+  - Remove SECURITY_SELINUX_DISABLE (removed in 6.4)
+  - Remove SECURITY_YAMA_STACKED (removed in 4.3)
+  - Remove EFI_VARS (removed ~6.0), add EFIVAR_FS
+  - Remove ZBUD and Z3FOLD (removed in 6.15), add ZSMALLOC
+  - Remove DEFAULT_SECURITY_YAMA (never existed)
+  - Fix CEPH_FS_SECURITY_LABEL typo (ny -> y)
+- Rebase 0001-Revert-Use-kernel-command-line-to-disable-memory-cgr.patch for 6.18
+
 * Thu Feb 26 2026 Damian Wrobel <dwrobel@ertelnet.rybnik.pl> - 6.12.73-1.rpi
 - Update to stable kernel patch v6.12.73
 - Drop patch upstream merged
