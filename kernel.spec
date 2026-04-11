@@ -71,7 +71,7 @@
 # For non-released -rc kernels, this will be appended after the rcX and
 # gitX tags, so a 3 here would become part of release "0.rcX.gitX.3"
 #
-%global baserelease 2
+%global baserelease 3
 
 # RaspberryPi foundation git snapshot (short)
 %global rpi_gitshort 3cf556892
@@ -206,7 +206,9 @@
 %ifarch aarch64
 %define make_target Image
 %define kernel_image arch/arm64/boot/Image
-%define install_name vmlinux
+# Use vmlinuz as install_name for ostree/GRUB BLS compatibility
+# (ostree expects vmlinuz in /usr/lib/modules/<ver>/ for boot entry generation)
+%define install_name vmlinuz
 %define asmarch arm64
 %define hdrarch arm64
 %endif
@@ -1688,6 +1690,10 @@ fi
 * Thu Apr 10 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.21-2.rpi
 - Remove grubby from kernel_prereq (RHCOS/ostree uses BLS, not grubby)
 - Remove bcm283x-firmware Requires (firmware handled in Containerfile/EEPROM)
+
+* Fri Apr 11 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.21-3.rpi
+- Change aarch64 install_name from vmlinux to vmlinuz for ostree/GRUB BLS compatibility
+- ostree expects vmlinuz in /usr/lib/modules/<ver>/ for boot entry generation
 
 * Thu Apr 10 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.21-1.rpi
 - Fork from dwrobel/kernel dw-6.12.y, rebased to kernel 6.18.y
