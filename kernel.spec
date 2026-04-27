@@ -1693,15 +1693,15 @@ fi
 - Sync RPi patch to rpi-6.18.y git revision: 216bde14af123cafba0a31982912dcf0a6e2b0e2
 - Resolves RP1 PCIe -524 EPROBE_DEFER on RPi5 with newer firmware DTBs
 
-* Thu Apr 10 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.21-2.rpi
-- Remove grubby from kernel_prereq (RHCOS/ostree uses BLS, not grubby)
-- Remove bcm283x-firmware Requires (firmware handled in Containerfile/EEPROM)
-
-* Fri Apr 11 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.21-3.rpi
+* Sat Apr 11 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.21-3.rpi
 - Change aarch64 install_name from vmlinux to vmlinuz for ostree/GRUB BLS compatibility
 - ostree expects vmlinuz in /usr/lib/modules/<ver>/ for boot entry generation
 
-* Thu Apr 10 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.21-1.rpi
+* Fri Apr 10 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.21-2.rpi
+- Remove grubby from kernel_prereq (RHCOS/ostree uses BLS, not grubby)
+- Remove bcm283x-firmware Requires (firmware handled in Containerfile/EEPROM)
+
+* Fri Apr 10 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.21-1.rpi
 - Fork from dwrobel/kernel dw-6.12.y, rebased to kernel 6.18.y
 - Update to stable kernel patch v6.18.21
 - Sync RPi patch to rpi-6.18.y git revision: 3cf556892848ecd4f7a322d04edd2ea2c0ae127b
