@@ -71,10 +71,11 @@
 # For non-released -rc kernels, this will be appended after the rcX and
 # gitX tags, so a 3 here would become part of release "0.rcX.gitX.3"
 #
-%global baserelease 3
+%global baserelease 4
 
 # RaspberryPi foundation git snapshot (short)
-%global rpi_gitshort 3cf556892
+# 216bde14af123cafba0a31982912dcf0a6e2b0e2 (raspberrypi/linux rpi-6.18.y, 2026-04-27)
+%global rpi_gitshort 216bde14a
 
 %global build_release %{baserelease}
 
@@ -124,7 +125,7 @@
 %if 0%{?released_kernel}
 
 # Do we have a -stable update to apply?
-%define stable_update 21
+%define stable_update 24
 
 # Set rpm version accordingly
 %if 0%{?stable_update}
@@ -1687,6 +1688,11 @@ fi
 
 
 %changelog
+* Mon Apr 27 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.24-4.rpi
+- Bump stable to v6.18.24 (matches raspberrypi/linux rpi-6.18.y tree)
+- Sync RPi patch to rpi-6.18.y git revision: 216bde14af123cafba0a31982912dcf0a6e2b0e2
+- Resolves RP1 PCIe -524 EPROBE_DEFER on RPi5 with newer firmware DTBs
+
 * Thu Apr 10 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.21-2.rpi
 - Remove grubby from kernel_prereq (RHCOS/ostree uses BLS, not grubby)
 - Remove bcm283x-firmware Requires (firmware handled in Containerfile/EEPROM)
