@@ -71,11 +71,10 @@
 # For non-released -rc kernels, this will be appended after the rcX and
 # gitX tags, so a 3 here would become part of release "0.rcX.gitX.3"
 #
-%global baserelease 4
+%global baserelease 2
 
 # RaspberryPi foundation git snapshot (short)
-# 216bde14af123cafba0a31982912dcf0a6e2b0e2 (raspberrypi/linux rpi-6.18.y, 2026-04-27)
-%global rpi_gitshort 216bde14a
+%global rpi_gitshort 79dc190b1
 
 %global build_release %{baserelease}
 
@@ -125,7 +124,7 @@
 %if 0%{?released_kernel}
 
 # Do we have a -stable update to apply?
-%define stable_update 24
+%define stable_update 28
 
 # Set rpm version accordingly
 %if 0%{?stable_update}
@@ -208,7 +207,6 @@
 %define make_target Image
 %define kernel_image arch/arm64/boot/Image
 # Use vmlinuz as install_name for ostree/GRUB BLS compatibility
-# (ostree expects vmlinuz in /usr/lib/modules/<ver>/ for boot entry generation)
 %define install_name vmlinuz
 %define asmarch arm64
 %define hdrarch arm64
@@ -1688,20 +1686,7 @@ fi
 
 
 %changelog
-* Mon Apr 27 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.24-4.rpi
-- Bump stable to v6.18.24 (matches raspberrypi/linux rpi-6.18.y tree)
-- Sync RPi patch to rpi-6.18.y git revision: 216bde14af123cafba0a31982912dcf0a6e2b0e2
-- Resolves RP1 PCIe -524 EPROBE_DEFER on RPi5 with newer firmware DTBs
-
-* Sat Apr 11 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.21-3.rpi
-- Change aarch64 install_name from vmlinux to vmlinuz for ostree/GRUB BLS compatibility
-- ostree expects vmlinuz in /usr/lib/modules/<ver>/ for boot entry generation
-
-* Fri Apr 10 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.21-2.rpi
-- Remove grubby from kernel_prereq (RHCOS/ostree uses BLS, not grubby)
-- Remove bcm283x-firmware Requires (firmware handled in Containerfile/EEPROM)
-
-* Fri Apr 10 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.21-1.rpi
+* Thu Apr 10 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.21-1.rpi
 - Fork from dwrobel/kernel dw-6.12.y, rebased to kernel 6.18.y
 - Update to stable kernel patch v6.18.21
 - Sync RPi patch to rpi-6.18.y git revision: 3cf556892848ecd4f7a322d04edd2ea2c0ae127b
