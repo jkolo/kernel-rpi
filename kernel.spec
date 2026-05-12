@@ -1276,6 +1276,11 @@ BuildKernel() {
     # (auto-loadable security concern) + floppy. Replaces former mod-extra.sh.
     # Signature: mod-denylist.sh <rpm_root> <mod_dir> <list_file> <dest_subdir>
     %{SOURCE17} %{buildroot} /lib/modules/$KernelVer %{SOURCE16} extra
+    # c9s spec uses `%files -f mod-extra.list`, but our spec packages the
+    # extra/ subtree by path (see %files %{?2:%{2}-}modules-extra → /lib/.../extra).
+    # The leftover file list at $RpmDir/mod-extra.list would trip check-files
+    # ("Installed but unpackaged"). Remove it.
+    rm -f %{buildroot}/mod-extra.list
 
     #
     # Generate the kernel-core and kernel-modules files lists
