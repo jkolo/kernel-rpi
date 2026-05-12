@@ -54,6 +54,16 @@
 # Build a bcm2712 (RPi5) kernel
 %define with_rpi5       %{?_with_rpi5:       1} %{?!_with_rpi5: 0}
 
+# Build the minimal variant (no RHCOS baseline merge — produces -minimal suffix).
+# One flag per HW (mirrors with_rpi4/with_rpi5 pattern). COPR build scripts
+# enable exactly one of these to target the matching minimal package.
+#
+# --with minimal_rpi4 -> kernel-rpi4-minimal  (skip config-rhcos.cfg merge)
+# --with minimal_rpi5 -> kernel-rpi5-minimal  (skip config-rhcos.cfg merge)
+# (no flag)           -> kernel-rpi4  / kernel-rpi5  (full RHCOS baseline)
+%define with_minimal_rpi4   %{?_with_minimal_rpi4:   1} %{?!_with_minimal_rpi4: 0}
+%define with_minimal_rpi5   %{?_with_minimal_rpi5:   1} %{?!_with_minimal_rpi5: 0}
+
 # For a stable, released kernel, released_kernel should be 1. For rawhide
 # and/or a kernel built from an rc or git snapshot, released_kernel should
 # be 0.
@@ -102,14 +112,22 @@
 %endif
 
 %if %{with_rpi4}
+%if %{with_minimal_rpi4}
+%global variant -rpi4-minimal
+%else
 %global variant -rpi4
+%endif
 %global with_tools 0
 %global with_perf 0
 %global with_lpae 0
 %endif
 
 %if %{with_rpi5}
+%if %{with_minimal_rpi5}
+%global variant -rpi5-minimal
+%else
 %global variant -rpi5
+%endif
 %global with_tools 0
 %global with_perf 0
 %global with_lpae 0
@@ -351,6 +369,15 @@ Source99: filter-modules.sh
 
 # kernel config modifications
 Source1000: config-bcm27xx.cfg
+# RHCOS aarch64 baseline kernel config — extracted from OCP rhel-coreos
+# image via extract-rhcos-config.sh. Merged BEFORE config-bcm27xx.cfg so RPi
+# overrides win. Skipped for --with minimal builds.
+Source1050: config-rhcos.cfg
+# Manually-curated renames bridging RHCOS-baseline (RHEL 9 kernel, 5.14)
+# symbols that were renamed/migrated in our build kernel (6.18). Generated
+# from rejected-symbols-report.md produced by verify-merge.sh audit.
+# Merged AFTER config-rhcos.cfg, BEFORE config-bcm27xx.cfg.
+Source1060: config-rhcos-renames.cfg
 Source1100: config-bcm283x.cfg
 Source1200: config-lpae.cfg
 
@@ -1010,11 +1037,19 @@ BuildKernel() {
     %endif
     %endif
     %endif
+    %if !(%{with_minimal_rpi4} || %{with_minimal_rpi5})
+    # merge RHCOS aarch64 baseline FIRST (kept above bcm27xx so RPi overrides win).
+    # Skipped for --with minimal_rpi{4,5} builds (kernel-rpi5-minimal / kernel-rpi4-minimal).
+    scripts/kconfig/merge_config.sh -m -r .config %{SOURCE1050} 2>&1 | tee merge-rhcos.log
+    # Apply curated renames for symbols migrated between RHCOS (5.14) and our kernel (6.18).
+    # File may be (nearly) empty if no renames needed; merge_config tolerates it.
+    scripts/kconfig/merge_config.sh -m -r .config %{SOURCE1060} 2>&1 | tee merge-rhcos-renames.log
+    %endif
     %else
     make bcmrpi_defconfig
     %endif
-    # merge kernel config fragments
-    scripts/kconfig/merge_config.sh -m -r .config %{SOURCE1000}
+    # merge kernel config fragments (RPi-specific overrides — LAST wins)
+    scripts/kconfig/merge_config.sh -m -r .config %{SOURCE1000} 2>&1 | tee merge-bcm27xx.log
     %endif
 
     %if %{with_rt_preempt}
