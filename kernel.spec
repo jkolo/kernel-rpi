@@ -958,6 +958,18 @@ find scripts tools -type f -exec sed -i '1s=^#! */usr/bin/\(python\|env python\)
 rm -f localversion-rt
 %endif
 
+# Create empty certs/rhel.pem to satisfy CONFIG_SYSTEM_TRUSTED_KEYS="certs/rhel.pem"
+# inherited from RHCOS baseline. Mirrors Fedora kernel.spec %prep logic
+# (truncate -s0 ../certs/rhel.pem) — see
+# https://src.fedoraproject.org/rpms/kernel/blob/rawhide/f/kernel.spec
+# In RHEL builds this file is populated with DUP/kpatch/NVIDIA/SecureBoot/IMA
+# CAs (via openssl x509 + cat). We ship none of those on RPi (no third-party
+# DKMS, no UEFI Secure Boot chain), so an empty trust anchor is functionally
+# equivalent to having no embedded keys, but keeps the kernel config aligned
+# with RHCOS instead of overriding CONFIG_SYSTEM_TRUSTED_KEYS in our renames.
+mkdir -p certs
+truncate -s0 certs/rhel.pem
+
 cd ..
 
 
