@@ -1080,6 +1080,10 @@ BuildKernel() {
     %{make} ARCH=$Arch dtbs dtbs_install INSTALL_DTBS_PATH=%{buildroot}/%{image_install_path}/dtb-$KernelVer
     cp -r %{buildroot}/%{image_install_path}/dtb-$KernelVer %{buildroot}/lib/modules/$KernelVer/dtb
     %if %{bcm270x}
+    # bcm2712_defconfig (RPi5) does not generate dtb/overlays/ subdir during
+    # dtbs_install (no overlay DTBs for BCM2712 in upstream RPi tree yet).
+    # Pre-create the dir so cp -p README works for both RPi4 and RPi5.
+    mkdir -p %{buildroot}/lib/modules/$KernelVer/dtb/overlays
     cp -p arch/$Arch/boot/dts/overlays/README %{buildroot}/lib/modules/$KernelVer/dtb/overlays/
     mkdir -p %{buildroot}/%{image_install_path}/overlays
     %endif
