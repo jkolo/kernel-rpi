@@ -364,8 +364,10 @@ BuildRequires: gcc-%{_build_arch}-linux-gnu
 
 Source0: https://www.kernel.org/pub/linux/kernel/v6.x/linux-%{kversion}.tar.xz
 Source16: mod-extra.list
-Source17: mod-extra.sh
+Source17: mod-denylist.sh
+Source98: filter-aarch64.sh
 Source99: filter-modules.sh
+Source20: parallel_xz.sh
 
 # kernel config modifications
 # X.509 certificates embedded into the kernel as trust anchors
@@ -1269,8 +1271,11 @@ BuildKernel() {
         rm -f modules.{alias*,builtin.bin,dep*,*map,symbols*,devname,softdep}
     popd
 
-    # Call the modules-extra script to move things around
-    %{SOURCE17} %{buildroot}/lib/modules/$KernelVer %{SOURCE16}
+    # Call the mod-denylist script (c9s-style) to move modules-extra into
+    # a separate 'extra/' subtree AND auto-blacklist modules with net-* aliases
+    # (auto-loadable security concern) + floppy. Replaces former mod-extra.sh.
+    # Signature: mod-denylist.sh <rpm_root> <mod_dir> <list_file> <dest_subdir>
+    %{SOURCE17} %{buildroot} /lib/modules/$KernelVer %{SOURCE16} extra
 
     #
     # Generate the kernel-core and kernel-modules files lists
@@ -1404,7 +1409,8 @@ popd
 
 
 if [ "%{zipmodules}" -eq "1" ]; then \
-    find %{buildroot}/lib/modules/ -type f -name '*.ko' | xargs xz; \
+    # Parallel xz: ~3-4x faster on multi-core build hosts than serial xargs xz.
+    find %{buildroot}/lib/modules/ -type f -name '*.ko' | %{SOURCE20} -j$(getconf _NPROCESSORS_ONLN); \
 fi
 
 

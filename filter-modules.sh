@@ -13,29 +13,36 @@
 # subsys should be in kernel-modules on all arches, please change the defaults
 # listed here.
 
+# Overrides is individual modules which need to remain in kernel-core due to deps.
+overrides="cec isst_if_common isst_tpmi_core isst_tpmi intel-vsec intel-vsec_tpmi wmi"
+
 # Set the default dirs/modules to filter out
-driverdirs="atm auxdisplay bcma bluetooth extcon fmc infiniband isdn media memstick message nfc ntb pcmcia platform regulator ssb staging uio uwb"
+driverdirs="atm auxdisplay bcma bluetooth firewire fmc iio infiniband isdn leds media memstick mfd mmc mtd nfc ntb pcmcia platform power ssb staging tty uio uwb w1"
 
-netdrvs="appletalk dsa hamradio ieee802154 irda ppp slip usb wireless"
+chardrvs="mwave pcmcia"
 
-ethdrvs="3com adaptec alteon amd atheros broadcom cadence calxeda chelsio cisco dec dlink emulex icplus marvell mellanox neterion nvidia oki-semi packetengines qlogic rdc renesas sfc silan sis smsc stmicro sun tehuti ti wiznet xircom"
+netdrvs="appletalk can dsa hamradio ieee802154 irda ppp slip usb wireless"
 
-scsidrvs="aacraid aic7xxx aic94xx be2iscsi bfa bnx2i bnx2fc csiostor cxgbi esas2r fcoe fnic isci libsas lpfc megaraid mpt2sas mpt3sas mvsas pm8001 qla2xxx qla4xxx sym53c8xx_2 ufs"
+ethdrvs="3com adaptec alteon amd aquantia atheros broadcom cadence calxeda chelsio cisco dec dlink emulex icplus marvell neterion nvidia oki-semi packetengines qlogic rdc renesas sfc silan sis smsc stmicro sun tehuti ti wiznet xircom"
 
-ttydrvs="ipwireless"
+cryptdrvs="bcm caam cavium chelsio hisilicon marvell qat"
 
-usbdrvs="atm wusbcore gadget dwc2 usbip"
+inputdrvs="gameport tablet touchscreen"
 
-fsdrvs="affs befs coda cramfs dlm ecryptfs hfs hfsplus jfs minix ncpfs nilfs2 ocfs2 reiserfs romfs squashfs sysv ubifs udf ufs"
+scsidrvs="aacraid aic7xxx aic94xx be2iscsi bfa bnx2i bnx2fc csiostor cxgbi esas2r fcoe fnic hisi_sas isci libsas lpfc megaraid mpt2sas mpt3sas mvsas pm8001 qla2xxx qla4xxx sym53c8xx_2 ufs qedf"
 
-netprots="appletalk atm ax25 batman-adv bluetooth dccp dsa ieee802154 irda l2tp mac80211 mac802154 netrom nfc rds rfkill rose sctp wimax wireless"
+usbdrvs="atm image misc serial wusbcore"
 
-drmdrvs="ast gma500 mgag200 via nouveau vc4"
+fsdrvs="affs befs smb coda cramfs ecryptfs hfs hfsplus jfs minix ncpfs nilfs2 ocfs2 reiserfs romfs sysv ubifs ufs"
 
-singlemods="ntb_netdev iscsi_ibft iscsi_boot_sysfs iscsi_tcp megaraid pmcraid qla1280 9pnet_rdma svcrdma xprtrdma hid-picolcd hid-prodikeys hwa-hc hwpoison-inject target_core_user ucb1400_core wm97xx-ts"
+netprots="6lowpan appletalk atm ax25 batman-adv bluetooth can dccp dsa ieee802154 irda l2tp mac80211 mac802154 mpls netrom nfc rds rfkill rose sctp smc wireless"
+
+drmdrvs="amd ast gma500 i2c i915 mgag200 nouveau radeon via xe"
+
+singlemods="ntb_netdev iscsi_ibft iscsi_boot_sysfs megaraid pmcraid qedi qla1280 9pnet_rdma rpcrdma nvmet-rdma nvme-rdma hid-picolcd hid-prodikeys hwa-hc hwpoison-inject hid-sensor-hub target_core_user sbp_target cxgbit iw_cxgb3 iw_cxgb4 cxgb3i cxgb3i cxgb3i_ddp cxgb4i chcr chtls parport_serial ism regmap-sdw regmap-sdw-mbq arizona-micsupp hid-asus nct6775 ntc_thermistor"
 
 # Grab the arch-specific filter list overrides
-#source ./filter-$2.sh
+source ./filter-$2.sh
 
 filter_dir() {
 	filelist=$1
@@ -50,7 +57,7 @@ filter_dir() {
 		grep -e "${dir}/" ${filelist} >> k-d.list
 		mv ${filelist}.tmp $filelist
 	fi
-	
+
 	return 0
 }
 
@@ -67,7 +74,7 @@ filter_ko() {
 		grep -e "${mod}.ko" ${filelist} >> k-d.list
 		mv ${filelist}.tmp $filelist
 	fi
-	
+
 	return 0
 }
 
@@ -83,10 +90,22 @@ do
 	filter_dir $1 drivers/net/${netdrv}
 done
 
+# Filter the char drivers
+for char in ${chardrvs}
+do
+	filter_dir $1 drivers/char/${char}
+done
+
 # Filter the ethernet drivers
 for eth in ${ethdrvs}
 do
 	filter_dir $1 drivers/net/ethernet/${eth}
+done
+
+# Filter the crypto drivers
+for crypt in ${cryptdrvs}
+do
+	filter_dir $1 drivers/crypto/${crypt}
 done
 
 # SCSI
@@ -95,10 +114,10 @@ do
 	filter_dir $1 drivers/scsi/${scsi}
 done
 
-# TTY
-for tty in ${ttydrvs}
+# Input
+for input in ${inputdrvs}
 do
-	filter_dir $1 drivers/tty/${tty}
+	filter_dir $1 drivers/input/${input}
 done
 
 # USB
@@ -127,12 +146,27 @@ done
 
 # Just kill sound.
 filter_dir $1 kernel/sound
+filter_dir $1 kernel/drivers/soundwire
 
 # Now go through and filter any single .ko files that might have deps on the
 # things we filtered above
 for mod in ${singlemods}
 do
         filter_ko $1 ${mod}
+done
+
+# Now process the override list to bring those modules back into core
+for mod in ${overrides}
+do
+	grep -v -e "/${mod}.ko" k-d.list > k-d.list.tmp
+	if [ $? -ne 0 ]
+        then
+                echo "Couldn't save ${mod}.ko  Skipping."
+        else
+                grep -e "/${mod}.ko" k-d.list >> $filelist
+                mv k-d.list.tmp k-d.list
+        fi
+
 done
 
 # Go through our generated drivers list and remove the .ko files.  We'll
