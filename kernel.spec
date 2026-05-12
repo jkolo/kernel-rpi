@@ -369,16 +369,19 @@ Source99: filter-modules.sh
 
 # kernel config modifications
 # X.509 certificates embedded into the kernel as trust anchors
-# (CONFIG_SYSTEM_TRUSTED_KEYS="certs/rhel.pem"). Mirrors Fedora kernel.spec —
-# DER-encoded certs from src.fedoraproject.org/rpms/kernel/.
+# (CONFIG_SYSTEM_TRUSTED_KEYS="certs/rhel.pem"). Mirrors CentOS Stream 9 /
+# RHEL 9 kernel.spec.template — DER-encoded certs from
+# https://gitlab.com/redhat/centos-stream/src/kernel/centos-stream-9/-/tree/main/redhat/keys
 # In %prep these are converted to PEM via openssl x509 and concatenated
-# into certs/rhel.pem.
+# into certs/rhel.pem in the RHEL-defined order.
 Source100: rheldup3.x509
 Source101: rhelkpatch1.x509
-Source102: nvidiagpuoot001.x509
-Source103: rhelimaca1.x509
-Source107: nvidiajetsonsoc.x509
-Source108: nvidiabfdpu.x509
+Source102: rhelimaca1.x509
+Source103: rhelima.x509
+Source104: rhelima_centos.x509
+Source105: nvidiagpuoot001.x509
+Source106: nvidiajetsonsoc.x509
+Source107: nvidiabfdpu.x509
 
 Source1000: config-bcm27xx.cfg
 # RHCOS aarch64 baseline kernel config — extracted from OCP rhel-coreos
@@ -972,24 +975,29 @@ rm -f localversion-rt
 
 # Build certs/rhel.pem — the embedded trust anchor pointed at by
 # CONFIG_SYSTEM_TRUSTED_KEYS="certs/rhel.pem" (inherited from RHCOS baseline).
-# Mirrors Fedora kernel.spec %prep logic. Note: an EMPTY rhel.pem doesn't
-# work — kernel build invokes extract-cert which requires at least one valid
-# PEM block, so we ship the real Red Hat public X.509 certs from
-# src.fedoraproject.org/rpms/kernel/. These are PUBLIC keys only — they let
-# the kernel trust modules signed by RH (DUP / kpatch / IMA / NVIDIA OOT) but
-# do NOT enable us to sign anything. Reference:
-# https://src.fedoraproject.org/rpms/kernel/blob/rawhide/f/kernel.spec
+# Mirrors CentOS Stream 9 / RHEL 9 kernel.spec.template %prep block, NOT Fedora.
+# Public RH X.509 certs from
+# https://gitlab.com/redhat/centos-stream/src/kernel/centos-stream-9/-/tree/main/redhat/keys
+# are converted DER→PEM with openssl x509 and concatenated in RHEL-defined order.
+# These are PUBLIC keys only — they let the kernel trust modules signed by RH
+# (DUP / kpatch / NVIDIA OOT / RHEL IMA / CentOS IMA) but do NOT enable us to
+# sign anything ourselves.
+# (Empty rhel.pem won't work — extract-cert requires at least one valid PEM block.)
 mkdir -p certs
-truncate -s0 certs/rhel.pem
 %if 0%{?rhel}
 openssl x509 -inform der -in %{SOURCE100} -out rheldup3.pem
 openssl x509 -inform der -in %{SOURCE101} -out rhelkpatch1.pem
-openssl x509 -inform der -in %{SOURCE102} -out nvidiagpuoot001.pem
-openssl x509 -inform der -in %{SOURCE107} -out nvidiajetsonsoc.pem
-openssl x509 -inform der -in %{SOURCE108} -out nvidiabfdpu.pem
-cat rheldup3.pem rhelkpatch1.pem nvidiagpuoot001.pem nvidiajetsonsoc.pem nvidiabfdpu.pem >> certs/rhel.pem
-openssl x509 -inform der -in %{SOURCE103} -out imaca.pem
-cat imaca.pem >> certs/rhel.pem
+openssl x509 -inform der -in %{SOURCE102} -out rhelimaca1.pem
+openssl x509 -inform der -in %{SOURCE105} -out nvidiagpuoot001.pem
+openssl x509 -inform der -in %{SOURCE106} -out nvidiajetsonsoc.pem
+openssl x509 -inform der -in %{SOURCE107} -out nvidiabfdpu.pem
+cat rheldup3.pem rhelkpatch1.pem rhelimaca1.pem nvidiagpuoot001.pem nvidiajetsonsoc.pem nvidiabfdpu.pem > certs/rhel.pem
+# RHEL spec does NOT add IMA release keys (rhelima/rhelima_centos) to rhel.pem
+# itself — those are installed separately into the IMA keyring via the
+# kernel-keys package. We ship them as Source103/Source104 for completeness
+# (mirroring RHEL Source layout exactly) but don't embed them as a default
+# trust anchor. RPi has no aarch64 secureboot path (only s390x/ppc64le get
+# secureboot.pem appended in RHEL spec).
 %endif
 
 cd ..
