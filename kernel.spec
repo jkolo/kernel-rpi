@@ -368,6 +368,18 @@ Source17: mod-extra.sh
 Source99: filter-modules.sh
 
 # kernel config modifications
+# X.509 certificates embedded into the kernel as trust anchors
+# (CONFIG_SYSTEM_TRUSTED_KEYS="certs/rhel.pem"). Mirrors Fedora kernel.spec —
+# DER-encoded certs from src.fedoraproject.org/rpms/kernel/.
+# In %prep these are converted to PEM via openssl x509 and concatenated
+# into certs/rhel.pem.
+Source100: rheldup3.x509
+Source101: rhelkpatch1.x509
+Source102: nvidiagpuoot001.x509
+Source103: rhelimaca1.x509
+Source107: nvidiajetsonsoc.x509
+Source108: nvidiabfdpu.x509
+
 Source1000: config-bcm27xx.cfg
 # RHCOS aarch64 baseline kernel config — extracted from OCP rhel-coreos
 # image via extract-rhcos-config.sh. Merged BEFORE config-bcm27xx.cfg so RPi
@@ -958,17 +970,27 @@ find scripts tools -type f -exec sed -i '1s=^#! */usr/bin/\(python\|env python\)
 rm -f localversion-rt
 %endif
 
-# Create empty certs/rhel.pem to satisfy CONFIG_SYSTEM_TRUSTED_KEYS="certs/rhel.pem"
-# inherited from RHCOS baseline. Mirrors Fedora kernel.spec %prep logic
-# (truncate -s0 ../certs/rhel.pem) — see
+# Build certs/rhel.pem — the embedded trust anchor pointed at by
+# CONFIG_SYSTEM_TRUSTED_KEYS="certs/rhel.pem" (inherited from RHCOS baseline).
+# Mirrors Fedora kernel.spec %prep logic. Note: an EMPTY rhel.pem doesn't
+# work — kernel build invokes extract-cert which requires at least one valid
+# PEM block, so we ship the real Red Hat public X.509 certs from
+# src.fedoraproject.org/rpms/kernel/. These are PUBLIC keys only — they let
+# the kernel trust modules signed by RH (DUP / kpatch / IMA / NVIDIA OOT) but
+# do NOT enable us to sign anything. Reference:
 # https://src.fedoraproject.org/rpms/kernel/blob/rawhide/f/kernel.spec
-# In RHEL builds this file is populated with DUP/kpatch/NVIDIA/SecureBoot/IMA
-# CAs (via openssl x509 + cat). We ship none of those on RPi (no third-party
-# DKMS, no UEFI Secure Boot chain), so an empty trust anchor is functionally
-# equivalent to having no embedded keys, but keeps the kernel config aligned
-# with RHCOS instead of overriding CONFIG_SYSTEM_TRUSTED_KEYS in our renames.
 mkdir -p certs
 truncate -s0 certs/rhel.pem
+%if 0%{?rhel}
+openssl x509 -inform der -in %{SOURCE100} -out rheldup3.pem
+openssl x509 -inform der -in %{SOURCE101} -out rhelkpatch1.pem
+openssl x509 -inform der -in %{SOURCE102} -out nvidiagpuoot001.pem
+openssl x509 -inform der -in %{SOURCE107} -out nvidiajetsonsoc.pem
+openssl x509 -inform der -in %{SOURCE108} -out nvidiabfdpu.pem
+cat rheldup3.pem rhelkpatch1.pem nvidiagpuoot001.pem nvidiajetsonsoc.pem nvidiabfdpu.pem >> certs/rhel.pem
+openssl x509 -inform der -in %{SOURCE103} -out imaca.pem
+cat imaca.pem >> certs/rhel.pem
+%endif
 
 cd ..
 
