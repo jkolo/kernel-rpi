@@ -81,10 +81,10 @@
 # For non-released -rc kernels, this will be appended after the rcX and
 # gitX tags, so a 3 here would become part of release "0.rcX.gitX.3"
 #
-%global baserelease 4
+%global baserelease 5
 
 # RaspberryPi foundation git snapshot (short)
-%global rpi_gitshort 79dc190b1
+%global rpi_gitshort 5fe081e02
 
 %global build_release %{baserelease}
 
@@ -142,7 +142,7 @@
 %if 0%{?released_kernel}
 
 # Do we have a -stable update to apply?
-%define stable_update 28
+%define stable_update 29
 
 # Set rpm version accordingly
 %if 0%{?stable_update}
@@ -395,6 +395,12 @@ Source1050: config-rhcos.cfg
 # from rejected-symbols-report.md produced by verify-merge.sh audit.
 # Merged AFTER config-rhcos.cfg, BEFORE config-bcm27xx.cfg.
 Source1060: config-rhcos-renames.cfg
+# Frozen full-flavor snapshots produced by regenerate-final-configs.sh from
+# fragments above + bcm271X_defconfig (filtered) + olddefconfig. Used by
+# %prep (full flavor only) as a single cp source — c9s-style. Regenerate
+# after editing any fragment or bumping kernel/RPi version pins.
+Source1051: config-rpi5-final.cfg
+Source1052: config-rpi4-final.cfg
 Source1100: config-bcm283x.cfg
 Source1200: config-lpae.cfg
 
@@ -1068,32 +1074,32 @@ BuildKernel() {
     %endif
     %if %{bcm270x}
     %if "%{_target_cpu}" != "armv6hl"
+    %if %{with_minimal_rpi4} || %{with_minimal_rpi5}
+    # Minimal flavor: bcm271X_defconfig + bcm27xx overlay (no RHCOS overlay).
+    # Used for kernel-rpi{4,5}-minimal (stub-initramfs, recovery, dev).
     %if %{with_rpi5}
     make bcm2712_defconfig
     %else
-    %if %{with_rpi4}
     make bcm2711_defconfig
+    %endif
+    scripts/kconfig/merge_config.sh -m -r .config %{SOURCE1000} 2>&1 | tee merge-bcm27xx.log
     %else
-    %ifarch aarch64
-    make bcm2711_defconfig
+    # Full flavor: c9s-style frozen snapshot config (single cp + olddefconfig).
+    # Snapshots produced offline by regenerate-final-configs.sh from fragments:
+    #   allnoconfig -> config-rhcos.cfg -> config-rhcos-renames.cfg
+    #              -> bcm271X_defconfig (filtered) -> config-bcm27xx.cfg -> olddefconfig
+    # To regenerate after editing fragments / bumping versions:
+    #   cd kernel-fork && ./regenerate-final-configs.sh
+    %if %{with_rpi5}
+    cp %{SOURCE1051} .config
     %else
-    make bcm2709_defconfig
+    cp %{SOURCE1052} .config
     %endif
-    %endif
-    %endif
-    %if !(%{with_minimal_rpi4} || %{with_minimal_rpi5})
-    # merge RHCOS aarch64 baseline FIRST (kept above bcm27xx so RPi overrides win).
-    # Skipped for --with minimal_rpi{4,5} builds (kernel-rpi5-minimal / kernel-rpi4-minimal).
-    scripts/kconfig/merge_config.sh -m -r .config %{SOURCE1050} 2>&1 | tee merge-rhcos.log
-    # Apply curated renames for symbols migrated between RHCOS (5.14) and our kernel (6.18).
-    # File may be (nearly) empty if no renames needed; merge_config tolerates it.
-    scripts/kconfig/merge_config.sh -m -r .config %{SOURCE1060} 2>&1 | tee merge-rhcos-renames.log
     %endif
     %else
     make bcmrpi_defconfig
-    %endif
-    # merge kernel config fragments (RPi-specific overrides — LAST wins)
     scripts/kconfig/merge_config.sh -m -r .config %{SOURCE1000} 2>&1 | tee merge-bcm27xx.log
+    %endif
     %endif
 
     %if %{with_rt_preempt}
