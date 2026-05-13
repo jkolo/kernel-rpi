@@ -81,7 +81,7 @@
 # For non-released -rc kernels, this will be appended after the rcX and
 # gitX tags, so a 3 here would become part of release "0.rcX.gitX.3"
 #
-%global baserelease 5
+%global baserelease 6
 
 # RaspberryPi foundation git snapshot (short)
 %global rpi_gitshort 5fe081e02
