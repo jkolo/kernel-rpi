@@ -1,0 +1,21 @@
+[Unit]
+Description=BLS→EFI sync after ignition-disks firstboot (RPi direct-kernel boot)
+# Runs specifically during RHCOS firstboot disk setup (LUKS provisioning).
+# After ignition-disks reformats root and updates the boot partition BLS to
+# the new deployment (boot.0), this service syncs cmdline.txt on the EFI
+# partition so the next boot uses the correct ostree path + LUKS params.
+ConditionPathExists=/etc/initrd-release
+ConditionPathIsDirectory=/proc/device-tree
+DefaultDependencies=no
+After=coreos-boot-edit.service
+Before=initrd-switch-root.target
+Before=initrd-cleanup.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/rpi-bls-sync.sh
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=ignition-diskful.target

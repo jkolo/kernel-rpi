@@ -1,0 +1,60 @@
+# Raspberry Pi 4 Boot Configuration
+# Direct kernel boot — RPi4 GPU firmware loads kernel8.img directly.
+# build-all-node-disks.sh post_process_efi places kernel8.img + initramfs.img
+# on this EFI partition and appends `initramfs initramfs.img followkernel` here.
+# (No pftf/RPi4 UEFI chain — kernel-rpi4 RPM provides kernel8.img already.)
+#
+# BOOT_ORDER is baked into pieeprom.upd at container-build time
+# (Containerfile.rpi4 Step 4.5 → rpi-eeprom-config) — NVMe first, SD/USB
+# fallback. EEPROM auto-update runs once on first boot.
+
+[all]
+# 64-bit ARM mode (required for aarch64 OKD)
+arm_64bit=1
+
+# UART for serial console — RPi4 BCM2711 PL011 is ttyAMA0 on GPIO 14/15.
+# No debug-header complication here (only one user PL011), so console=ttyAMA0
+# in cmdline.txt is unambiguous.
+#
+# enable_uart=1: kernel UART console on 40-pin header
+# uart_2ndstage=1: enable start4.elf / firmware diagnostic logging on UART
+#   (RPi4 doesn't have RP1, no enable_rp1_uart; bootloader is BCM2711 firmware)
+# dtparam=uart0=on: enable PL011 on GPIO 14/15 (no _console variant on BCM2711)
+enable_uart=1
+uart_2ndstage=1
+dtparam=uart0=on
+
+# Minimal GPU memory split (headless — HDMI console tty1 still works since
+# it's framebuffer-level, not 3D compute).
+gpu_mem=16
+
+# Disable overscan for clean HDMI to a directly-connected monitor.
+disable_overscan=1
+
+# Active cooling fan via GPIO PWM.
+dtoverlay=pwm-fan
+
+# Disable WiFi + Bluetooth — cluster nodes are wired-only. Frees boot time
+# and avoids loading brcmfmac/hci_uart. RPi4: plain `disable-wifi` /
+# `disable-bt` map directly to BCM2711 wifi/BT (no -pi5 variants here).
+dtoverlay=disable-wifi
+dtoverlay=disable-bt
+
+# Disable HDMI audio — same reasoning as RPi5. Video on HDMI unaffected.
+dtparam=audio=off
+
+# Disable boot splash bitmap.
+disable_splash=1
+
+# Skip 1-second boot delay (helpful when booting from fast media).
+boot_delay=0
+
+# Note: arm_boost=1 is default-on for RPi4B with recent firmware; specifying
+# it explicitly is harmless and self-documents the intent.
+arm_boost=1
+
+# Note: NO kernel= directive here.
+# build-all-node-disks.sh post_process_efi copies kernel8.img + initramfs.img
+# to the EFI partition and appends `initramfs initramfs.img followkernel` to
+# this file. RPi4 GPU firmware then loads the kernel directly with cmdline.txt.
+# (Direct kernel boot — same as RPi5. No pftf UEFI / GRUB chain.)

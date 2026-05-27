@@ -1,0 +1,17 @@
+[Unit]
+Description=Remove ignition.firstboot marker and re-sync cmdline (RPi)
+After=ignition-complete.target
+Wants=ignition-complete.target
+ConditionPathIsDirectory=/proc/device-tree
+ConditionPathExists=/boot/ignition.firstboot
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/rm -f /boot/ignition.firstboot
+ExecStart=/usr/sbin/rpi-bls-sync.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

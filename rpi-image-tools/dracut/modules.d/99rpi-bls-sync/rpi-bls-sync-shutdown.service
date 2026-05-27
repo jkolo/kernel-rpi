@@ -1,0 +1,23 @@
+[Unit]
+Description=BLS→EFI sync before shutdown/reboot (RPi direct-kernel boot)
+DefaultDependencies=no
+Before=reboot.target
+Before=final.target
+Before=initrd-switch-root.target
+Before=initrd-cleanup.service
+# In initrd firstboot: run after all ignition stages complete and coreos-boot-edit
+# has updated the boot partition BLS. After= is ignored if units don't exist.
+After=ignition-complete.target
+After=coreos-boot-edit.service
+ConditionPathIsDirectory=/proc/device-tree
+
+[Service]
+Type=oneshot
+ExecStart=/usr/sbin/rpi-bls-sync.sh
+StandardOutput=journal+console
+StandardError=journal+console
+
+[Install]
+WantedBy=reboot.target
+WantedBy=final.target
+WantedBy=initrd-switch-root.target
