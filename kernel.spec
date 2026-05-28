@@ -81,10 +81,10 @@
 # For non-released -rc kernels, this will be appended after the rcX and
 # gitX tags, so a 3 here would become part of release "0.rcX.gitX.3"
 #
-%global baserelease 10
+%global baserelease 11
 
 # RaspberryPi foundation git snapshot (short)
-%global rpi_gitshort bb5a64adb
+%global rpi_gitshort 95b85bebb
 
 %global build_release %{baserelease}
 
@@ -142,7 +142,7 @@
 %if 0%{?released_kernel}
 
 # Do we have a -stable update to apply?
-%define stable_update 32
+%define stable_update 33
 
 # Set rpm version accordingly
 %if 0%{?stable_update}
@@ -1798,6 +1798,11 @@ fi
 
 
 %changelog
+* Thu May 28 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.33-11.rpi
+- Update to stable kernel patch v6.18.33
+- Sync RPi patch to rpi-6.18.y git revision: 95b85bebbedcaedfa7ca79116ed38b7376fba412
+- Notable RPi fixes: BCMGENET DMA revert, lan78xx EEE rework, v3d runtime PM hangs fix
+
 * Thu Apr 10 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.21-1.rpi
 - Fork from dwrobel/kernel dw-6.12.y, rebased to kernel 6.18.y
 - Update to stable kernel patch v6.18.21
