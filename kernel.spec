@@ -81,10 +81,10 @@
 # For non-released -rc kernels, this will be appended after the rcX and
 # gitX tags, so a 3 here would become part of release "0.rcX.gitX.3"
 #
-%global baserelease 11
+%global baserelease 12
 
 # RaspberryPi foundation git snapshot (short)
-%global rpi_gitshort 95b85bebb
+%global rpi_gitshort bb4863f0b
 
 %global build_release %{baserelease}
 
@@ -142,7 +142,7 @@
 %if 0%{?released_kernel}
 
 # Do we have a -stable update to apply?
-%define stable_update 33
+%define stable_update 34
 
 # Set rpm version accordingly
 %if 0%{?stable_update}
@@ -1798,6 +1798,13 @@ fi
 
 
 %changelog
+* Tue Jun 02 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.34-12.rpi
+- Update to stable kernel patch v6.18.34
+- Sync RPi patch to rpi-6.18.y git revision: bb4863f0bedc... (HEAD 2026-06-01)
+- Notable RPi fixes touching our HW: nvme pci LE accessors for HMB on arm64
+  (cp NVMe), pcie-brcmstb preserve HARD_DEBUG bits (RP1), of: compat with old
+  Pi 5 firmware; config-rhcos.cfg re-extracted from OCP 4.21.18 base
+
 * Thu May 28 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.33-11.rpi
 - Update to stable kernel patch v6.18.33
 - Sync RPi patch to rpi-6.18.y git revision: 95b85bebbedcaedfa7ca79116ed38b7376fba412
