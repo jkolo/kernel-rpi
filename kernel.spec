@@ -195,6 +195,8 @@
    %define Flavour rpi
   %endif
  %endif
+ # minimal warianty wykluczone (nie budujemy) — full rpi5/rpi4 mają różny
+ # Flavour → różne NEVRA, brak kolizji po rename Name: kernel.
  %define buildid .%{Flavour}
 %else
  %define bcm270x 0
@@ -263,7 +265,11 @@
 %define initrd_prereq  dracut
 
 
-Name: kernel%{?variant}
+# Name kanoniczne `kernel` (NIE kernel%{?variant}=kernel-rpi5) — umożliwia
+# `rpm-ostree override replace` (same-name upgrade transakcja) zamiast
+# override-remove+kmod-stub. Flavour (rpi5/rpi4) zostaje w buildid/.rpiX KVERREL
+# → uname/modules-dir bez zmian. variant nadal steruje %description/debuginfo.
+Name: kernel
 License: GPLv2 and Redistributable, no modification permitted
 %if !%{bcm270x}
 Summary: The Linux kernel for the Raspberry Pi (BCM283x)
