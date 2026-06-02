@@ -1386,13 +1386,13 @@ BuildKernel() {
     # Make sure the files lists start with absolute paths or rpmbuild fails.
     # Also add in the dir entries
     sed -e 's/^lib*/\/lib/' %{?zipsed} %{buildroot}/k-d.list > ../kernel-modules.list
-    # RHEL 9.4+ split: core modules + their kernel/ subdirs go to
-    # kernel-modules-core (a separately-named package, so rpm-ostree override
-    # replace can swap stock kernel-modules-core by name). kernel-core keeps only
-    # vmlinuz/System.map/config/dtb + the modules.* index (macro %files core).
-    sed -e 's/^lib*/%dir \/lib/' %{?zipsed} %{buildroot}/module-dirs.list > ../kernel-modules-core.list
-    sed -e 's/^lib*/\/lib/' %{?zipsed} %{buildroot}/modules.list >> ../kernel-modules-core.list
-    : > ../kernel-core.list
+    # RHEL 9.4+ split: the core module FILES (.ko) move to kernel-modules-core (a
+    # separately-named package, so rpm-ostree override replace can swap stock
+    # kernel-modules-core by name). kernel-core keeps the kernel/ DIR tree (%dir
+    # entries — must stay non-empty: rpmbuild rejects an empty %files -f list) +
+    # vmlinuz/System.map/config/dtb + modules.* index (macro %files core).
+    sed -e 's/^lib*/%dir \/lib/' %{?zipsed} %{buildroot}/module-dirs.list > ../kernel-core.list
+    sed -e 's/^lib*/\/lib/' %{?zipsed} %{buildroot}/modules.list > ../kernel-modules-core.list
 
     # Cleanup
     rm -f %{buildroot}/k-d.list
