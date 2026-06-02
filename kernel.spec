@@ -81,7 +81,7 @@
 # For non-released -rc kernels, this will be appended after the rcX and
 # gitX tags, so a 3 here would become part of release "0.rcX.gitX.3"
 #
-%global baserelease 12
+%global baserelease 13
 
 # RaspberryPi foundation git snapshot (short)
 %global rpi_gitshort bb4863f0b
@@ -680,10 +680,37 @@ Provides: kernel-modules = %{version}-%{release}%{?1:+%{1}}\
 Provides: installonlypkg(kernel-module)\
 Provides: kernel%{?1:-%{1}}-modules-uname-r = %{KVERREL}%{?1:+%{1}}\
 Requires(pre): kernel-uname-r = %{KVERREL}%{?1:+%{1}}\
+Requires: kernel%{?1:-%{1}}-modules-core-uname-r = %{KVERREL}%{?1:+%{1}}\
 AutoReq: no\
 AutoProv: yes\
 %description %{?1:%{1}-}modules\
 This package provides commonly used kernel modules for the %{?2:%{2}-}core kernel package.\
+%{nil}
+
+#
+# This macro creates a kernel-<subpackage>-modules-core package.
+#	%%kernel_modules_core_package <subpackage> <pretty-name>
+#
+# RHEL 9.4+ split: the core (always-loaded) kernel modules live in a separate
+# kernel-modules-core package rather than inside kernel-core. Having a package
+# literally named "kernel-modules-core" lets `rpm-ostree override replace` swap
+# the stock RHCOS kernel-modules-core by name (the alternative — --remove +
+# install — triggers the stock %postun depmod EINVAL during the rpm-ostree
+# scriptlet sandbox teardown).
+%define kernel_modules_core_package() \
+%package %{?1:%{1}-}modules-core\
+Summary: Core kernel modules to match the %{?2:%{2}-}core kernel\
+Provides: kernel%{?1:-%{1}}-modules-core-%{_target_cpu} = %{version}-%{release}\
+Provides: kernel-modules-core-%{_target_cpu} = %{version}-%{release}%{?1:+%{1}}\
+Provides: kernel-modules-core = %{version}-%{release}%{?1:+%{1}}\
+Provides: installonlypkg(kernel-module)\
+Provides: kernel%{?1:-%{1}}-modules-core-uname-r = %{KVERREL}%{?1:+%{1}}\
+Requires(pre): kernel-uname-r = %{KVERREL}%{?1:+%{1}}\
+Requires(postun): kernel-uname-r = %{KVERREL}%{?1:+%{1}}\
+AutoReq: no\
+AutoProv: yes\
+%description %{?1:%{1}-}modules-core\
+This package provides the kernel modules which are always loaded by the %{?2:%{2} }kernel.\
 %{nil}
 
 #
@@ -710,11 +737,13 @@ The meta-package for the %{1} kernel\
 Summary: %{variant_summary}\
 Provides: kernel-%{?1:%{1}-}core-uname-r = %{KVERREL}%{?1:+%{1}}\
 Provides: installonlypkg(kernel)\
+Requires: kernel%{?1:-%{1}}-modules-core-uname-r = %{KVERREL}%{?1:+%{1}}\
 %{expand:%%kernel_reqprovconf}\
 %if %{?1:1} %{!?1:0} \
 %{expand:%%kernel_meta_package %{?1:%{1}}}\
 %endif\
 %{expand:%%kernel_devel_package %{?1:%{1}} %{!?{-n}:%{1}}%{?{-n}:%{-n*}}}\
+%{expand:%%kernel_modules_core_package %{?1:%{1}} %{!?{-n}:%{1}}%{?{-n}:%{-n*}}}\
 %{expand:%%kernel_modules_package %{?1:%{1}} %{!?{-n}:%{1}}%{?{-n}:%{-n*}}}\
 %{expand:%%kernel_modules_extra_package %{?1:%{1}} %{!?{-n}:%{1}}%{?{-n}:%{-n*}}}\
 %{expand:%%kernel_debuginfo_package %{?1:%{1}}}\
@@ -1357,8 +1386,13 @@ BuildKernel() {
     # Make sure the files lists start with absolute paths or rpmbuild fails.
     # Also add in the dir entries
     sed -e 's/^lib*/\/lib/' %{?zipsed} %{buildroot}/k-d.list > ../kernel-modules.list
-    sed -e 's/^lib*/%dir \/lib/' %{?zipsed} %{buildroot}/module-dirs.list > ../kernel-core.list
-    sed -e 's/^lib*/\/lib/' %{?zipsed} %{buildroot}/modules.list >> ../kernel-core.list
+    # RHEL 9.4+ split: core modules + their kernel/ subdirs go to
+    # kernel-modules-core (a separately-named package, so rpm-ostree override
+    # replace can swap stock kernel-modules-core by name). kernel-core keeps only
+    # vmlinuz/System.map/config/dtb + the modules.* index (macro %files core).
+    sed -e 's/^lib*/%dir \/lib/' %{?zipsed} %{buildroot}/module-dirs.list > ../kernel-modules-core.list
+    sed -e 's/^lib*/\/lib/' %{?zipsed} %{buildroot}/modules.list >> ../kernel-modules-core.list
+    : > ../kernel-core.list
 
     # Cleanup
     rm -f %{buildroot}/k-d.list
@@ -1586,6 +1620,19 @@ fi\
 /sbin/depmod -a %{KVERREL}%{?1:+%{1}}\
 %{nil}
 
+#
+# This macro defines a %%post script for a kernel*-modules-core package.
+# It also defines a %%postun script that does the same thing.
+#	%%kernel_modules_core_post [<subpackage>]
+#
+%define kernel_modules_core_post() \
+%{expand:%%post %{?1:%{1}-}modules-core}\
+/sbin/depmod -a %{KVERREL}%{?1:+%{1}}\
+%{nil}\
+%{expand:%%postun %{?1:%{1}-}modules-core}\
+/sbin/depmod -a %{KVERREL}%{?1:+%{1}}\
+%{nil}
+
 # This macro defines a %%posttrans script for a kernel package.
 #	%%kernel_variant_posttrans [<subpackage>]
 # More text can follow to go at the end of this variant's %%post.
@@ -1646,6 +1693,7 @@ cp -f /lib/modules/%{KVERREL}%{?1:+%{1}}/.%{install_name}.hmac /%{image_install_
 #
 %define kernel_variant_post(v:r:) \
 %{expand:%%kernel_devel_post %{?-v*}}\
+%{expand:%%kernel_modules_core_post %{?-v*}}\
 %{expand:%%kernel_modules_post %{?-v*}}\
 %{expand:%%kernel_modules_extra_post %{?-v*}}\
 %{expand:%%kernel_variant_posttrans %{?-v*}}\
@@ -1780,6 +1828,8 @@ fi
 /lib/modules/%{KVERREL}%{?2:+%{2}}/source\
 /lib/modules/%{KVERREL}%{?2:+%{2}}/updates\
 /lib/modules/%{KVERREL}%{?2:+%{2}}/modules.*\
+%{expand:%%files -f kernel-%{?2:%{2}-}modules-core.list %{?2:%{2}-}modules-core}\
+%defattr(-,root,root)\
 %{expand:%%files -f kernel-%{?2:%{2}-}modules.list %{?2:%{2}-}modules}\
 %defattr(-,root,root)\
 %{expand:%%files %{?2:%{2}-}devel}\
@@ -1804,6 +1854,13 @@ fi
 
 
 %changelog
+* Tue Jun 02 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.34-13.rpi
+- Add kernel-modules-core subpackage (RHEL 9.4+ split): core modules + their
+  kernel/ subdirs move from kernel-core into kernel-modules-core. Enables
+  `rpm-ostree override replace` to swap stock RHCOS kernel-modules-core by name
+  (avoids the --remove %postun depmod EINVAL in the rpm-ostree scriptlet sandbox).
+  kernel-core/kernel-modules now Require kernel-modules-core-uname-r.
+
 * Tue Jun 02 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.34-12.rpi
 - Update to stable kernel patch v6.18.34
 - Sync RPi patch to rpi-6.18.y git revision: bb4863f0bedc... (HEAD 2026-06-01)
