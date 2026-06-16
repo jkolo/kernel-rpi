@@ -316,6 +316,9 @@ BuildRequires: m4
 BuildRequires: make
 BuildRequires: net-tools
 BuildRequires: openssl-devel
+# openssl CLI (/usr/bin/openssl) — %prep konwertuje certy DER→PEM (openssl x509).
+# Na el9 był w domyślnym buildroocie; el10 mock jest chudszy → jawny BuildRequires.
+BuildRequires: openssl
 %if 0%{?fedora} >= 41
 BuildRequires: openssl-devel-engine
 %endif
