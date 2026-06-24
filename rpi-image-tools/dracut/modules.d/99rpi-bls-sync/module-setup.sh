@@ -14,7 +14,21 @@ depends() {
 }
 
 install() {
+    # bash w initramfs: usługi initrd wołają `bash /usr/sbin/rpi-bls-sync.sh`.
+    # Root cause 203/EXEC w initrd: inst_script kopiował skrypt z mode 0644
+    # (źródło nie było +x) → systemd nie mógł go execve (brak X_OK). Skrypt jest
+    # teraz +x, więc inst_script przeniesie X_OK; inst_script wciąga też interpreter
+    # z absolutnego shebangu (#!/usr/bin/bash). inst_multiple bash = jawne
+    # ubezpieczenie na wypadek wariantów parsowania shebangu przez dracut.
+    # bash + awk explicitly in the initramfs: the script's BLS-selection loop and
+    # the cmdline dedup use awk; bash is the interpreter for the unit ExecStart.
+    inst_multiple bash awk
+
     inst_script "$moddir/rpi-bls-sync.sh" /usr/sbin/rpi-bls-sync.sh
+    # Belt-and-suspenders: guarantee the initramfs copy is executable regardless
+    # of whether the source git mode survives packaging (cp -r in the spec
+    # preserves git mode; a 0644 source there reintroduces the 203/EXEC bug).
+    chmod 0755 "$initdir/usr/sbin/rpi-bls-sync.sh"
 
     # Shutdown/switch-root fallback: runs before any reboot or switch-root.
     inst_simple "$moddir/rpi-bls-sync-shutdown.service" \

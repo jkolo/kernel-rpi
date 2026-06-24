@@ -6,6 +6,6 @@ ConditionPathIsDirectory=/proc/device-tree
 
 [Service]
 Type=oneshot
-ExecStart=/usr/sbin/rpi-bls-sync.sh
+ExecStart=/usr/bin/bash /usr/sbin/rpi-bls-sync.sh
 StandardOutput=journal
 StandardError=journal

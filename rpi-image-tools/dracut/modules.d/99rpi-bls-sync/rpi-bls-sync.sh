@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/usr/bin/bash
 # Sync ostree's current default BLS entry (kernel + initramfs + cmdline) to
 # /boot/efi/ so that Raspberry Pi firmware (which reads EFI FAT32 directly
 # with no UEFI/GRUB chain) boots the correct deployment.
@@ -54,9 +54,23 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# --- Find lowest-numbered BLS entry (= default next boot) ---
-BLS=$(ls "$BOOT_MOUNT/loader/entries/ostree-"*.conf 2>/dev/null | sort -V | head -1 || true)
-if [ ! -f "$BLS" ]; then
+# --- Find the DEFAULT BLS entry: highest `version` field (BLS spec) ---
+# ostree assigns the default deployment (index 0, booted next) the HIGHEST
+# `version`; bootloaders (GRUB on x86 RHCOS) sort entries by version descending
+# and boot the first. The filename counter (ostree-N.conf) is NOT the boot order:
+# after an in-place update there are 2+ entries and the LOWEST filename is the
+# OLDEST deployment. Picking `sort -V | head -1` synced the old OS → the node
+# rebooted straight back to the previous image (root cause of a stuck CP roll on
+# RPi: rebase staged the new deployment but the EFI cmdline kept pointing at the
+# old one). Select by max `version` to match GRUB's default-entry semantics.
+BLS=""; BEST_VER=-1
+for _e in "$BOOT_MOUNT"/loader/entries/ostree-*.conf; do
+    [ -f "$_e" ] || continue
+    _v=$(awk '/^version[[:space:]]/ { print $2; exit }' "$_e")
+    _v=${_v:-0}
+    if [ "$_v" -gt "$BEST_VER" ] 2>/dev/null; then BEST_VER=$_v; BLS=$_e; fi
+done
+if [ -z "$BLS" ] || [ ! -f "$BLS" ]; then
     echo "rpi-bls-sync: no BLS entry found under $BOOT_MOUNT/loader/entries/" >&2
     exit 0
 fi
@@ -102,6 +116,15 @@ for f in /etc/cmdline.d/*.conf /sysroot/etc/cmdline.d/*.conf; do
 done
 CMDLINE="$CMDLINE $CMDLINE_EXTRA"
 
+# --- Dedup kernel args (order-preserving, keep-first whole token) ---
+# BLS options= (rpm-ostree kargs) and /etc/cmdline.d/*.conf can carry the SAME
+# args (cgroup/swap/console) in BOTH layers → duplicated tokens in cmdline.txt
+# (observed: cgroup_no_v1="all" + console=* doubled). Keep the first occurrence
+# of each whole token; this preserves DISTINCT console= values and their order
+# (the LAST console= is the primary device). NO sort -u, NO dedup-by-key. Runs
+# BEFORE the clock_usec append so the per-run timestamp is never a dedup input.
+CMDLINE=$(printf '%s' "$CMDLINE" | tr ' ' '\n' | awk 'NF && !seen[$0]++' | tr '\n' ' ' | sed 's/ $//')
+
 # --- Inject fresh wall-clock (RPi has no RTC) ---
 # Remove any existing systemd.clock_usec= first, then append a fresh value.
 CMDLINE=$(printf '%s' "$CMDLINE" | sed 's/systemd\.clock_usec=[^ ]*//g')
@@ -109,47 +132,54 @@ CMDLINE="$CMDLINE systemd.clock_usec=$(date +%s%6N)"
 
 CMDLINE=$(printf '%s' "$CMDLINE" | tr -s ' ' | sed 's/^ //;s/ $//')
 
-# --- Verify ostree= path and correct boot slot if mismatched ---
-# bootc-image-writer may write BLS with ostree=/ostree/boot.N/... but deploy
-# the filesystem into boot.M (M≠N). In initrd Boot A the root is LUKS-encrypted
-# and inaccessible, so when the path is not found anywhere fall back to
-# /proc/cmdline (which contains the ostree= that successfully booted this kernel).
+# --- Re-resolve ostree= boot-slot against the LIVE deployment (liveness-first) ---
+# The boot-slot integer N in /ostree/boot.N/... is a TRANSIENT index that ostree
+# flips on bootversion changes and PRUNES — it is NOT part of the deployment's
+# stateroot/csum/serial identity. The chosen BLS entry can carry a slot whose
+# directory still exists at write-time but is orphaned moments later by ostree's
+# prune (write-then-prune race) → the next boot's ostree-prepare-root can't find
+# it → dracut emergency. (Root cause of cp1/w1 going to emergency: a sync wrote
+# boot.0 while boot.0 dir still existed; ostree then pruned boot.0.)
+#
+# /proc/cmdline carries the ostree= that ostree-prepare-root ACTUALLY used to
+# mount THIS running deployment — authoritative for the slot. So whenever the BLS
+# entry refers to the SAME deployment (stateroot/csum/serial) as what is running,
+# adopt the LIVE slot from /proc — REGARDLESS of whether the BLS slot dir still
+# exists. (The previous existence-gate let the stale slot through whenever its
+# dir had not been pruned yet, which is exactly when the race bites.) Then refuse
+# to write any ostree= whose dir is verifiably absent.
 _OARG=$(printf '%s' "$CMDLINE" | grep -o 'ostree=[^ ]*' || true)
 if [ -n "$_OARG" ]; then
-    _OPATH="${_OARG#ostree=}"          # /ostree/boot.N/stateroot/hash/serial
-    _ODIR=$(dirname "$_OPATH")         # /ostree/boot.N/stateroot/hash
-    _FOUND=0
-    for _PFX in "" "/sysroot"; do
-        [ -d "${_PFX}${_ODIR}" ] && { _FOUND=1; break; }
-    done
-    if [ "$_FOUND" = "0" ]; then
-        _HASH=$(basename "$_ODIR")
-        _SR=$(basename "$(dirname "$_ODIR")")
-        _SER=$(basename "$_OPATH")
-        _FIXED=""
-        for _SLOT in 0 1; do
-            _CAND="/ostree/boot.${_SLOT}/${_SR}/${_HASH}"
-            for _PFX in "" "/sysroot"; do
-                if [ -d "${_PFX}${_CAND}" ]; then
-                    _FIXED="ostree=${_CAND}/${_SER}"
-                    break 2
-                fi
-            done
-        done
-        if [ -z "$_FIXED" ]; then
-            # Root inaccessible (LUKS not opened) — preserve current boot's path
-            _PROC=$(grep -o 'ostree=[^ ]*' /proc/cmdline 2>/dev/null || true)
-            if [ -n "$_PROC" ] && [ "$_PROC" != "$_OARG" ]; then
-                _FIXED="$_PROC"
-                echo "rpi-bls-sync: ostree dir not on filesystem, using /proc/cmdline: ${_FIXED}" >&2
-            fi
-        else
-            echo "rpi-bls-sync: corrected ostree boot slot: ${_OARG} → ${_FIXED}" >&2
+    _OREST="${_OARG#ostree=/ostree/boot.*/}"         # stateroot/csum/serial (slot-stripped)
+    _PROC=$(grep -o 'ostree=[^ ]*' /proc/cmdline 2>/dev/null | head -1 || true)
+    if [ -n "$_PROC" ] && [ "$_PROC" != "$_OARG" ]; then
+        _PREST="${_PROC#ostree=/ostree/boot.*/}"     # live stateroot/csum/serial
+        if [ "$_PREST" = "$_OREST" ]; then
+            # Same deployment, stale slot in BLS → adopt the LIVE boot-slot.
+            echo "rpi-bls-sync: adopting live boot-slot ${_OARG} -> ${_PROC}" >&2
+            CMDLINE=$(printf '%s' "$CMDLINE" | sed "s|${_OARG}|${_PROC}|g")
+            _OARG="$_PROC"
         fi
-        [ -n "$_FIXED" ] && CMDLINE=$(printf '%s' "$CMDLINE" | sed "s|${_OARG}|${_FIXED}|g")
+        # else: BLS refers to a DIFFERENT deployment (legitimately staged
+        #       next-boot); keep _OARG and let the existence guard validate it.
+    fi
+    # Final guard: never write an ostree= whose deployment dir is absent — that
+    # bricks the boot. Only enforce when the ostree root is actually accessible
+    # (in initrd pre-LUKS we cannot verify; trust the value so firstboot is not
+    # broken). On absence, leave the last-good cmdline.txt untouched and exit.
+    _GDIR=$(dirname "${_OARG#ostree=}")
+    _root_ok=0
+    for _PFX in "" "/sysroot"; do [ -d "${_PFX}/ostree/deploy" ] && { _root_ok=1; break; }; done
+    if [ "$_root_ok" = "1" ]; then
+        _present=0
+        for _PFX in "" "/sysroot"; do [ -d "${_PFX}${_GDIR}" ] && { _present=1; break; }; done
+        if [ "$_present" = "0" ]; then
+            echo "rpi-bls-sync: refusing to write absent ostree slot ${_OARG}; keeping current cmdline.txt" >&2
+            exit 0
+        fi
     fi
 fi
-unset _OARG _OPATH _ODIR _FOUND _PFX _HASH _SR _SER _SLOT _CAND _FIXED _PROC
+unset _OARG _OREST _PROC _PREST _GDIR _root_ok _present _PFX
 
 # --- Locate EFI partition (FAT32) ---
 if mountpoint -q /boot/efi 2>/dev/null; then
@@ -178,8 +208,11 @@ DST_K_SIZE=$(stat -c%s "$EFI_MOUNT/$KERNEL_NAME" 2>/dev/null || echo 0)
 DST_I_SIZE=$(stat -c%s "$EFI_MOUNT/initramfs.img" 2>/dev/null || echo 0)
 [ "$SRC_K_SIZE" = "$DST_K_SIZE" ] || NEED_SYNC=1
 [ "$SRC_I_SIZE" = "$DST_I_SIZE" ] || NEED_SYNC=1
+# Compare WITHOUT the per-run systemd.clock_usec= — RPi has no RTC so it changes
+# every invocation; comparing it would force a rewrite on every trigger (flapping).
+_strip_clock() { printf '%s' "$1" | sed 's/systemd\.clock_usec=[^ ]*//g' | tr -s ' ' | sed 's/^ //;s/ $//'; }
 CURRENT_CMDLINE=$(tr -d '\n' <"$EFI_MOUNT/cmdline.txt" 2>/dev/null || echo "")
-[ "$CURRENT_CMDLINE" = "$CMDLINE" ] || NEED_SYNC=1
+[ "$(_strip_clock "$CURRENT_CMDLINE")" = "$(_strip_clock "$CMDLINE")" ] || NEED_SYNC=1
 
 if [ "$NEED_SYNC" = "0" ]; then
     echo "rpi-bls-sync: already in sync, no work needed"

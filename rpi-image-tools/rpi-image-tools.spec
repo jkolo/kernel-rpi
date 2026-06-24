@@ -23,7 +23,7 @@
 
 Name:           rpi-image-tools
 Version:        1.0.0
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        RHCOS image tooling for Raspberry Pi (BLS sync, EEPROM, firmware config)
 
 License:        GPLv2+
@@ -123,6 +123,20 @@ install -D -m 0644 /boot/efi/config-rpi4.txt /boot/efi/config.txt
 /boot/efi/config-rpi4.txt
 
 %changelog
+* Wed Jun 24 2026 Jerzy Kołosowski <jurek@kolosowscy.pl> - 1.0.0-2
+- rpi-bls-sync: liveness-first ostree boot-slot resolution — adopt the
+  /proc/cmdline boot-slot whenever the BLS entry refers to the running
+  deployment (same stateroot/csum/serial), and refuse to write an ostree=
+  whose deployment dir is absent. Fixes the write-then-prune race in which a
+  sync wrote a boot.N slot that ostree pruned moments later → next boot's
+  ostree-prepare-root failed → dracut emergency (bricked cp1 + w1).
+- rpi-bls-sync: dedup duplicated cgroup/swap/console kargs (order-preserving,
+  keep-first); clock-agnostic idempotency compare (no flapping w/o RTC).
+- module-setup: inst_multiple awk + chmod 0755 the initramfs script as a
+  belt-and-suspenders guard against the 203/EXEC (mode-0644) regression.
+- Release bump: forces COPR/dnf to ship the rebuilt RPM (avoids NVR de-dup
+  silently keeping pre-fix content, the root of the 468dd5c8 image regression).
+
 * Sat May 24 2026 Jerzy Kołosowski <jurek@kolosowscy.pl> - 1.0.0-1
 - Initial packaging: extract Containerfile COPY contents into RPM for
   on-cluster build (MachineOSConfig) compatibility. Source files mirrored

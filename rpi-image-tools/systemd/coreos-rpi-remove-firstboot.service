@@ -9,7 +9,7 @@ ConditionPathExists=/boot/ignition.firstboot
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/bin/rm -f /boot/ignition.firstboot
-ExecStart=/usr/sbin/rpi-bls-sync.sh
+ExecStart=/usr/bin/bash /usr/sbin/rpi-bls-sync.sh
 StandardOutput=journal
 StandardError=journal
 
