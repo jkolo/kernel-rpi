@@ -1,11 +1,11 @@
 [Unit]
 Description=Sync ostree BLS entry to /boot/efi/ (RPi direct-kernel boot)
-Documentation=file:///usr/sbin/rpi-bls-sync.sh
+Documentation=file:///usr/sbin/rpi-bls-sync
 RequiresMountsFor=/boot /boot/efi
 ConditionPathIsDirectory=/proc/device-tree
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/bash /usr/sbin/rpi-bls-sync.sh
+ExecStart=/usr/sbin/rpi-bls-sync
 StandardOutput=journal
 StandardError=journal

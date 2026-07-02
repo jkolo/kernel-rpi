@@ -5,8 +5,8 @@ Before=final.target
 Before=reboot.target
 # DefaultDependencies=no usuwa domyślny ordering, więc gdy unit zostanie
 # pociągnięty we wczesnej fazie bootu (hostname jeszcze localhost), /usr
-# z ostree/composefs root NIE jest gotowy → ExecStart pada 203/EXEC
-# "Failed to locate executable ...: Permission denied". Wymuszamy gotowość
+# z ostree/composefs root NIE jest gotowy → ExecStart pada (binarka
+# nieosiągalna, ENOENT/EACCES zależnie od stanu mountu). Wymuszamy gotowość
 # rootfs: wtedy wczesne wywołanie albo czeka, albo robi idempotentny
 # re-sync bieżącego BLS→EFI bez błędu. Sync przy shutdown działa jak dotąd.
 After=local-fs.target
@@ -15,12 +15,11 @@ ConditionPathIsDirectory=/proc/device-tree
 
 [Service]
 Type=oneshot
-# bash jako interpreter: czyta skrypt (open/read, wymaga R_OK) zamiast
-# execve(skrypt) (wymaga X_OK). Root cause 203/EXEC: kopia initramfs z inst_script
-# zachowywała mode 0644 źródła (real-root OK, bo spec instaluje -m 0755). Fix
-# dwutorowy: skrypt jest teraz +x (inst_script przeniesie X_OK) ORAZ wrapper bash
-# jako defense-in-depth na regresję mode. /usr/bin/bash potwierdzony obecny.
-ExecStart=/usr/bin/bash /usr/sbin/rpi-bls-sync.sh
+# Natywna binarka (rpi-bls-sync-rs) — dawny 203/EXEC (mode-0644 initramfs
+# copy + bash-wrapper defense-in-depth) jest nieaktualny: direct execve
+# wymaga X_OK bez fallbacku, więc +x jest load-bearing w dwóch miejscach
+# (rpi-image-tools.spec %attr ORAZ module-setup.sh chmod), nie tutaj.
+ExecStart=/usr/sbin/rpi-bls-sync
 StandardOutput=journal+console
 StandardError=journal+console
 

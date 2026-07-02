@@ -13,7 +13,7 @@ Before=initrd-cleanup.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/bash /usr/sbin/rpi-bls-sync.sh
+ExecStart=/usr/sbin/rpi-bls-sync
 StandardOutput=journal+console
 StandardError=journal+console
 

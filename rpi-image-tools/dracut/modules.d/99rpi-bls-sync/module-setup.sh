@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Dracut module: 99rpi-bls-sync
-# Installs the BLS→EFI sync script and shutdown service into the initrd.
+# Installs the BLS→EFI sync binary and shutdown service into the initrd.
 # Only the shutdown fallback is needed in initrd — the path unit is full-system.
 
 check() {
@@ -14,21 +14,24 @@ depends() {
 }
 
 install() {
-    # bash w initramfs: usługi initrd wołają `bash /usr/sbin/rpi-bls-sync.sh`.
-    # Root cause 203/EXEC w initrd: inst_script kopiował skrypt z mode 0644
-    # (źródło nie było +x) → systemd nie mógł go execve (brak X_OK). Skrypt jest
-    # teraz +x, więc inst_script przeniesie X_OK; inst_script wciąga też interpreter
-    # z absolutnego shebangu (#!/usr/bin/bash). inst_multiple bash = jawne
-    # ubezpieczenie na wypadek wariantów parsowania shebangu przez dracut.
-    # bash + awk explicitly in the initramfs: the script's BLS-selection loop and
-    # the cmdline dedup use awk; bash is the interpreter for the unit ExecStart.
-    inst_multiple bash awk
+    # Native binary (rpi-bls-sync-rs) replaces the old bash+awk script —
+    # retires the whole 203/EXEC fragility class (interpreter + shebang mode
+    # dependency) rather than mitigating it. inst_binary resolves and drags
+    # in the binary's shared-library dependencies (libc, libgcc_s) the same
+    # way it would for any other ELF binary.
+    inst_binary /usr/sbin/rpi-bls-sync
+    # Belt-and-suspenders: guarantee the initramfs copy is executable
+    # regardless of whether the source RPM's mode survives packaging
+    # (rpi-image-tools.spec installs it -m 0755; a 0644 source here would
+    # still hit 203/EXEC since a direct binary execve has no bash-wrapper
+    # open/read fallback the way the old script did).
+    chmod 0755 "$initdir/usr/sbin/rpi-bls-sync"
 
-    inst_script "$moddir/rpi-bls-sync.sh" /usr/sbin/rpi-bls-sync.sh
-    # Belt-and-suspenders: guarantee the initramfs copy is executable regardless
-    # of whether the source git mode survives packaging (cp -r in the spec
-    # preserves git mode; a 0644 source there reintroduces the 203/EXEC bug).
-    chmod 0755 "$initdir/usr/sbin/rpi-bls-sync.sh"
+    # mount(2) (used directly by the binary — no exec of mount(8)/blkid)
+    # does NOT autoload filesystem modules the way mount(8) does; without
+    # this, mounting the ext4 boot partition or the vfat EFI partition in
+    # initrd fails outright.
+    instmods vfat ext4
 
     # Shutdown/switch-root fallback: runs before any reboot or switch-root.
     inst_simple "$moddir/rpi-bls-sync-shutdown.service" \
