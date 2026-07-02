@@ -84,7 +84,7 @@
 %global baserelease 1
 
 # RaspberryPi foundation git snapshot (short)
-%global rpi_gitshort cd1109f06
+%global rpi_gitshort 63598c831
 
 %global build_release %{baserelease}
 
@@ -142,7 +142,7 @@
 %if 0%{?released_kernel}
 
 # Do we have a -stable update to apply?
-%define stable_update 36
+%define stable_update 37
 
 # Set rpm version accordingly
 %if 0%{?stable_update}
@@ -1857,6 +1857,14 @@ fi
 
 
 %changelog
+* Thu Jul 02 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.37-1.rpi
+- Update to stable kernel patch v6.18.37 (latest longterm/LTS point release)
+- Sync RPi patch to rpi-6.18.y git revision: 63598c83153e19b1f99067ab6df7409de2c111f8
+  (HEAD 2026-07-02) — 4 commits ahead of the prior in-flight cd1109f06 snapshot,
+  all minor overlay tweaks (sdhost gpios_22_27 param, rpi5 overlay additions/
+  fixes), unrelated to the 6.18.37 stable merge itself
+- baserelease reset to 1 for the new upstream point release
+
 * Tue Jun 02 2026 Jerzy Kolosowski <jurek@kolosowscy.pl> - 6.18.34-13.rpi
 - Add kernel-modules-core subpackage (RHEL 9.4+ split): core modules + their
   kernel/ subdirs move from kernel-core into kernel-modules-core. Enables
