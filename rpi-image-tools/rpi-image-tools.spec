@@ -24,6 +24,13 @@
 # Build via COPR jkolo/kernel-rpi (Custom source type, see
 # copr/copr-rpi-image-tools.sh for the build script).
 
+# rpi-bls-sync (Cargo.toml [profile.release] strip = true) ships with no
+# debug symbols by design (small production initramfs binary) — rpmbuild's
+# automatic debuginfo/debugsource generation finds nothing to package and
+# errors out on an empty %files list for -debugsource. Skip it entirely;
+# standard idiom for RPM-packaged pre-stripped Rust/Go binaries.
+%global debug_package %{nil}
+
 Name:           rpi-image-tools
 Version:        1.1.0
 Release:        1%{?dist}
@@ -171,7 +178,7 @@ install -D -m 0644 /boot/efi/config-rpi4.txt /boot/efi/config.txt
 - Release bump: forces COPR/dnf to ship the rebuilt RPM (avoids NVR de-dup
   silently keeping pre-fix content, the root of the 468dd5c8 image regression).
 
-* Sat May 24 2026 Jerzy Kołosowski <jurek@kolosowscy.pl> - 1.0.0-1
+* Sun May 24 2026 Jerzy Kołosowski <jurek@kolosowscy.pl> - 1.0.0-1
 - Initial packaging: extract Containerfile COPY contents into RPM for
   on-cluster build (MachineOSConfig) compatibility. Source files mirrored
   from RHCOS-RaspberryPi/{config,dracut,systemd,scripts} at the time of
