@@ -8,7 +8,7 @@
 #   - /usr/lib/dracut/modules.d/99rpi-bls-sync/  — EFI ↔ BLS sync at boot/shutdown
 #     (module-setup.sh; the sync binary itself is inst_binary'd from
 #     /usr/sbin/rpi-bls-sync, not copied from this tree — see below)
-#   - /usr/sbin/rpi-bls-sync                     — native Rust binary (rpi-bls-sync-rs/),
+#   - /usr/sbin/rpi-bls-sync                     — native Rust binary (rpi-bls-sync/),
 #                                                   rewrite of the former bash script
 #   - /usr/lib/systemd/system/rpi-bls-sync.{path,service}
 #   - /usr/lib/systemd/system/rpi-bls-sync-shutdown.service
@@ -33,14 +33,14 @@
 
 Name:           rpi-image-tools
 Version:        1.1.0
-Release:        1%{?dist}
+Release:        2%{?dist}
 Summary:        RHCOS image tooling for Raspberry Pi (BLS sync, EEPROM, firmware config)
 
 License:        GPLv2+
 URL:            https://github.com/jkolo/kernel-rpi
 Source0:        %{name}-%{version}.tar.gz
 
-# rpi-bls-sync-rs is a native Rust binary (glibc-dynamic) — no longer a
+# rpi-bls-sync is a native Rust binary (glibc-dynamic) — no longer a
 # noarch shell-script package. offline `cargo build` needs cargo+rust in
 # the mock chroot; vendored crates are added to the SRPM tarball by
 # copr/copr-rpi-image-tools.sh (network-enabled SRPM phase) so %build
@@ -79,7 +79,7 @@ with rpi-image-tools-rpi5 — installs to /boot/efi/config.txt.
 %build
 export CARGO_HOME=%{_builddir}/cargo-home
 mkdir -p "$CARGO_HOME"
-cd rpi-bls-sync-rs
+cd rpi-bls-sync
 cargo build --release --offline --locked
 
 %install
@@ -91,7 +91,7 @@ cp -r dracut/modules.d/99rpi-bls-sync/* %{buildroot}/usr/lib/dracut/modules.d/99
 
 # Native sync binary (+x load-bearing — direct execve, no bash-wrapper
 # open/read fallback the way the old script had)
-install -D -m 0755 rpi-bls-sync-rs/target/release/rpi-bls-sync \
+install -D -m 0755 rpi-bls-sync/target/release/rpi-bls-sync \
     %{buildroot}/usr/sbin/rpi-bls-sync
 
 # Systemd units
@@ -144,8 +144,24 @@ install -D -m 0644 /boot/efi/config-rpi4.txt /boot/efi/config.txt
 /boot/efi/config-rpi4.txt
 
 %changelog
+* Sat Jul 11 2026 Jerzy Kołosowski <jurek@kolosowscy.pl> - 1.1.0-2
+- rpi-bls-sync: fix firstboot slot brick (shutdown-after-finalize race). When
+  ostree-finalize-staged swaps the bootversion at shutdown and prunes the OLD
+  live slot, resolve() no longer refuses (which left a stale boot.N in
+  cmdline.txt → next boot's ostree-prepare-root failed → dracut emergency);
+  it now falls back to the finalized BLS slot. Existence-driven: prefer the
+  live /proc slot if present, else the BLS slot if present, else refuse
+  (DeployProbe now carries both candidate slots' on-disk presence).
+- rpi-bls-sync: temp mountpoint /tmp → /run so the ostree-finalize-staged
+  ExecStopPost hook can mount the boot/EFI partitions at late shutdown, when
+  the root fs is already read-only (was "mkdir /tmp: Read-only file system" →
+  the sync then silently never ran, the actual cause of the brick).
+- Drop the retired bash oracle / QEMU harness from the test tree entirely;
+  pure Rust unit tests only. Rename crate dir rpi-bls-sync-rs → rpi-bls-sync.
+- Release bump: forces COPR/dnf to ship the rebuilt RPM (NVR de-dup guard).
+
 * Thu Jul 02 2026 Jerzy Kołosowski <jurek@kolosowscy.pl> - 1.1.0-1
-- rpi-bls-sync: rewritten from bash to a native Rust binary (rpi-bls-sync-rs/,
+- rpi-bls-sync: rewritten from bash to a native Rust binary (rpi-bls-sync/,
   TDD with byte-parity oracle tests against the retired bash script). Fixes
   the whole 203/EXEC initramfs-fragility class at the root (no interpreter,
   no shebang mode-bit dependency) instead of patching around it.

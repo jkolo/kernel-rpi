@@ -22,11 +22,13 @@ pub struct SyncInputs<'a> {
     pub cmdline_d_contents_ordered: &'a [&'a str],
     /// Whether `<prefix>/ostree/deploy` exists, for `""` then `"/sysroot"`.
     pub deploy_root_prefixes_present: [bool; 2],
-    /// Whether the GUARD's target directory (see `slot::target_after_adoption`)
-    /// exists, for `""` then `"/sysroot"` — the caller must derive this
-    /// directory from `target_after_adoption`'s result BEFORE doing this I/O
-    /// check (see the `DeployProbe` caller contract in `slot.rs`).
-    pub guard_target_dir_present_prefixes: [bool; 2],
+    /// Whether the LIVE (`/proc`) slot's deploy dir exists, for `""` then
+    /// `"/sysroot"`. The caller derives this dir from
+    /// `slot::target_after_adoption` (see the `DeployProbe` caller contract).
+    pub live_slot_dir_present_prefixes: [bool; 2],
+    /// Whether the BLS slot's deploy dir exists, for `""` then `"/sysroot"`.
+    /// The caller derives this dir from `slot::bls_slot_token`.
+    pub bls_slot_dir_present_prefixes: [bool; 2],
     /// Fresh wall-clock in microseconds (RPi has no RTC).
     pub clock_usec: u64,
     /// EFI partition's current `cmdline.txt`, if present.
@@ -105,8 +107,9 @@ pub fn plan_sync(inputs: &SyncInputs) -> SyncPlan {
     let (kernel_name, assembled) = (pre.kernel_name, pre.cmdline);
 
     let ctx = context::probe_deploy_root(&inputs.deploy_root_prefixes_present);
-    let guard_dir_present = inputs.guard_target_dir_present_prefixes.iter().any(|&p| p);
-    let probe = context::to_deploy_probe(ctx, guard_dir_present);
+    let live_present = inputs.live_slot_dir_present_prefixes.iter().any(|&p| p);
+    let bls_present = inputs.bls_slot_dir_present_prefixes.iter().any(|&p| p);
+    let probe = context::to_deploy_probe(ctx, live_present, bls_present);
 
     let resolution = slot::resolve(&assembled, inputs.proc_cmdline, probe);
     let resolved = match resolution {

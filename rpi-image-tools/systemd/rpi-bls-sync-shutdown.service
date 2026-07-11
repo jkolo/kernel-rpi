@@ -15,7 +15,7 @@ ConditionPathIsDirectory=/proc/device-tree
 
 [Service]
 Type=oneshot
-# Natywna binarka (rpi-bls-sync-rs) — dawny 203/EXEC (mode-0644 initramfs
+# Natywna binarka (rpi-bls-sync) — dawny 203/EXEC (mode-0644 initramfs
 # copy + bash-wrapper defense-in-depth) jest nieaktualny: direct execve
 # wymaga X_OK bez fallbacku, więc +x jest load-bearing w dwóch miejscach
 # (rpi-image-tools.spec %attr ORAZ module-setup.sh chmod), nie tutaj.

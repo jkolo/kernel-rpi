@@ -14,7 +14,7 @@ depends() {
 }
 
 install() {
-    # Native binary (rpi-bls-sync-rs) replaces the old bash+awk script —
+    # Native binary (rpi-bls-sync) replaces the old bash+awk script —
     # retires the whole 203/EXEC fragility class (interpreter + shebang mode
     # dependency) rather than mitigating it. inst_binary resolves and drags
     # in the binary's shared-library dependencies (libc, libgcc_s) the same

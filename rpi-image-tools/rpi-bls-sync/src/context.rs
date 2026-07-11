@@ -24,15 +24,20 @@ pub fn probe_deploy_root(prefixes_have_ostree_deploy: &[bool]) -> ExecContext {
     }
 }
 
-/// Given the execution context and whether the target slot dir exists under
-/// either prefix, build the `DeployProbe` that `slot::resolve` expects. See
-/// the `DeployProbe` doc comment in `slot.rs` for the caller contract on
-/// which directory `slot_dir_present` must reflect (the post-adoption
-/// target, not naively the original BLS one).
-pub fn to_deploy_probe(ctx: ExecContext, slot_dir_present: bool) -> DeployProbe {
-    match ctx {
-        ExecContext::InitrdPreLuks => DeployProbe::RootInaccessible,
-        ExecContext::RealRoot if slot_dir_present => DeployProbe::RootAccessible,
-        ExecContext::RealRoot => DeployProbe::RootAccessibleDirAbsent,
+/// Build the `DeployProbe` that `slot::resolve` expects from the execution
+/// context and the on-disk presence of BOTH candidate slot dirs. See the
+/// `DeployProbe` caller contract in `slot.rs`: the live slot is the `/proc`
+/// token's dir (only meaningful when adopting), the BLS slot is the BLS
+/// token's dir. In `InitrdPreLuks` the guard is skipped, so the presence
+/// flags are carried through but ignored by `resolve`.
+pub fn to_deploy_probe(
+    ctx: ExecContext,
+    live_slot_present: bool,
+    bls_slot_present: bool,
+) -> DeployProbe {
+    DeployProbe {
+        root_accessible: matches!(ctx, ExecContext::RealRoot),
+        live_slot_present,
+        bls_slot_present,
     }
 }

@@ -42,7 +42,12 @@ fn matches_resolve_internal_decision() {
     let proc = "ostree=/ostree/boot.1/rhcos/CSUM/0";
     let target = target_after_adoption(bls, proc).unwrap();
 
-    match resolve(bls, proc, DeployProbe::RootAccessible) {
+    let probe = DeployProbe {
+        root_accessible: true,
+        live_slot_present: true,
+        bls_slot_present: true,
+    };
+    match resolve(bls, proc, probe) {
         Resolution::Rewrite(new_cmdline) => assert!(new_cmdline.contains(&target)),
         other => panic!("expected Rewrite, got {other:?}"),
     }

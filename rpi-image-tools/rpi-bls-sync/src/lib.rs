@@ -66,7 +66,13 @@ fn resolve_mount(
                 );
                 return Err(0);
             };
-            let tmp = std::env::temp_dir().join(format!(
+            // Use /run (core tmpfs — writable and mounted until very late in
+            // the shutdown sequence) rather than /tmp. At
+            // ostree-finalize-staged's ExecStopPost (the reliable post-BLS-swap
+            // hook) the root fs is already read-only, so a /tmp mkdir fails
+            // with "Read-only file system" and the sync silently never happens
+            // — leaving a stale slot in cmdline.txt that bricks the next boot.
+            let tmp = Path::new("/run").join(format!(
                 "rpi-bls-sync-{}",
                 partlabel_candidates[0]
             ));
@@ -175,14 +181,17 @@ pub fn run() -> i32 {
     };
 
     let deploy_root_prefixes_present = dir_present_under_prefixes("/ostree/deploy");
-    let guard_target_dir_present_prefixes = match slot::target_after_adoption(&pre.cmdline, &proc_cmdline)
-    {
-        Some(target) => {
-            let gdir = dirname(target.trim_start_matches("ostree="));
-            dir_present_under_prefixes(&gdir)
-        }
-        None => [false, false],
-    };
+    // Probe BOTH candidate slots' deploy dirs (see the DeployProbe caller
+    // contract in slot.rs): the live /proc slot (target_after_adoption) and
+    // the BLS slot (bls_slot_token).
+    let slot_dir_present =
+        |token: &str| dir_present_under_prefixes(&dirname(token.trim_start_matches("ostree=")));
+    let live_slot_dir_present_prefixes = slot::target_after_adoption(&pre.cmdline, &proc_cmdline)
+        .map(|t| slot_dir_present(&t))
+        .unwrap_or([false, false]);
+    let bls_slot_dir_present_prefixes = slot::bls_slot_token(&pre.cmdline)
+        .map(|t| slot_dir_present(&t))
+        .unwrap_or([false, false]);
 
     let efi_existing = mounts::locate_efi(
         mounts::is_mountpoint(Path::new("/boot/efi")),
@@ -217,7 +226,8 @@ pub fn run() -> i32 {
         ignition_firstboot_present,
         cmdline_d_contents_ordered: &cmdline_d_refs,
         deploy_root_prefixes_present,
-        guard_target_dir_present_prefixes,
+        live_slot_dir_present_prefixes,
+        bls_slot_dir_present_prefixes,
         clock_usec: clock_usec_now(),
         current_cmdline_txt: current_cmdline_txt.as_deref(),
         src_kernel_size: src_kernel_meta.len(),

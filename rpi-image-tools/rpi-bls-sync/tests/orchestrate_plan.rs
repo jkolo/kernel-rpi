@@ -13,7 +13,8 @@ fn happy_path_inputs() -> SyncInputs<'static> {
         ignition_firstboot_present: false,
         cmdline_d_contents_ordered: &[],
         deploy_root_prefixes_present: [true, false],
-        guard_target_dir_present_prefixes: [true, false],
+        live_slot_dir_present_prefixes: [true, false],
+        bls_slot_dir_present_prefixes: [true, false],
         clock_usec: 123_456,
         current_cmdline_txt: None,
         src_kernel_size: 31_000_000,
@@ -66,9 +67,11 @@ fn already_in_sync_skips() {
 }
 
 #[test]
-fn real_root_refuses_when_guard_target_absent() {
+fn real_root_refuses_when_bls_slot_absent() {
     let mut inputs = happy_path_inputs();
-    inputs.guard_target_dir_present_prefixes = [false, false];
+    // proc == bls (no adoption); the BLS slot dir is absent -> refuse.
+    inputs.live_slot_dir_present_prefixes = [false, false];
+    inputs.bls_slot_dir_present_prefixes = [false, false];
     assert_eq!(plan_sync(&inputs), SyncPlan::RefuseExit0);
 }
 
@@ -78,7 +81,8 @@ fn initrd_context_syncs_even_when_guard_target_would_be_absent() {
     // skipped entirely, regardless of guard_target_dir_present_prefixes.
     let mut inputs = happy_path_inputs();
     inputs.deploy_root_prefixes_present = [false, false];
-    inputs.guard_target_dir_present_prefixes = [false, false];
+    inputs.live_slot_dir_present_prefixes = [false, false];
+    inputs.bls_slot_dir_present_prefixes = [false, false];
     match plan_sync(&inputs) {
         SyncPlan::Sync { .. } => {}
         other => panic!("expected Sync (firstboot-safety trust), got {other:?}"),
@@ -98,6 +102,24 @@ fn adopts_live_slot_end_to_end() {
             assert!(!cmdline_txt.contains("boot.0"));
         }
         other => panic!("expected Sync, got {other:?}"),
+    }
+}
+
+#[test]
+fn falls_back_to_bls_when_live_pruned_end_to_end() {
+    // shutdown-after-finalize (THE FIX): /proc names boot.1 (same deployment)
+    // but that slot has been pruned; the finalized BLS slot boot.0 is present
+    // -> the written cmdline.txt must keep boot.0, NOT refuse.
+    let mut inputs = happy_path_inputs();
+    inputs.proc_cmdline = "ostree=/ostree/boot.1/rhcos/CSUM/0";
+    inputs.live_slot_dir_present_prefixes = [false, false];
+    inputs.bls_slot_dir_present_prefixes = [true, false];
+    match plan_sync(&inputs) {
+        SyncPlan::Sync { cmdline_txt, .. } => {
+            assert!(cmdline_txt.contains("ostree=/ostree/boot.0/rhcos/CSUM/0"));
+            assert!(!cmdline_txt.contains("boot.1"));
+        }
+        other => panic!("expected Sync with BLS boot.0, got {other:?}"),
     }
 }
 
