@@ -1,7 +1,10 @@
 # Raspberry Pi 4 Boot Configuration
 # Direct kernel boot — RPi4 GPU firmware loads kernel8.img directly.
 # build-all-node-disks.sh post_process_efi places kernel8.img + initramfs.img
-# on this EFI partition and appends `initramfs initramfs.img followkernel` here.
+# on this EFI partition and appends the initramfs followkernel directive here.
+# (Directive string deliberately not quoted verbatim in comments — rpi-bls-sync
+# detects its presence and older builds used a substring match that a quoted
+# comment satisfied, clobbering the FAT config.txt without a real directive.)
 # (No pftf/RPi4 UEFI chain — kernel-rpi4 RPM provides kernel8.img already.)
 #
 # BOOT_ORDER is baked into pieeprom.upd at container-build time
@@ -55,6 +58,6 @@ arm_boost=1
 
 # Note: NO kernel= directive here.
 # build-all-node-disks.sh post_process_efi copies kernel8.img + initramfs.img
-# to the EFI partition and appends `initramfs initramfs.img followkernel` to
+# to the EFI partition and appends the initramfs followkernel directive to
 # this file. RPi4 GPU firmware then loads the kernel directly with cmdline.txt.
 # (Direct kernel boot — same as RPi5. No pftf UEFI / GRUB chain.)

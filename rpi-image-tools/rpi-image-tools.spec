@@ -33,7 +33,7 @@
 
 Name:           rpi-image-tools
 Version:        1.1.0
-Release:        2%{?dist}
+Release:        3%{?dist}
 Summary:        RHCOS image tooling for Raspberry Pi (BLS sync, EEPROM, firmware config)
 
 License:        GPLv2+
@@ -144,6 +144,24 @@ install -D -m 0644 /boot/efi/config-rpi4.txt /boot/efi/config.txt
 /boot/efi/config-rpi4.txt
 
 %changelog
+* Fri Jul 17 2026 Jerzy Kołosowski <jurek@kolosowscy.pl> - 1.1.0-3
+- rpi-bls-sync: config.txt clobber fix (cp-jurek brick 2026-07-17). The
+  followkernel presence check is now LINE-anchored (trimmed, non-comment
+  lines) — the pristine config-rpi{4,5}.txt documents the directive inside a
+  header comment, which the old substring check matched, so the sync wrote
+  the pristine copy to the FAT with no real directive → firmware loaded the
+  kernel without initramfs → VFS panic on the next boot.
+- rpi-bls-sync: config.txt is sourced from the RESOLVED EFI mount, never the
+  raw /boot/efi path (context-ambiguous: empty mountpoint stub while /boot
+  is mounted, the deployment's pristine copy after late-shutdown unmount).
+  Mount-discipline: reads/writes only via partitions verified mounted,
+  temp-mounting and unmounting when needed.
+- rpi-bls-sync: dedup_tokens splits on all whitespace — cmdline.d trailing
+  newlines produced a MULTI-LINE cmdline.txt of which RPi firmware reads
+  only the first line (console= and systemd.clock_usec= silently dropped).
+- config-rpi{4,5}.txt: reworded header comments so they no longer contain
+  the verbatim directive string (defense in depth for older sync binaries).
+
 * Sat Jul 11 2026 Jerzy Kołosowski <jurek@kolosowscy.pl> - 1.1.0-2
 - rpi-bls-sync: fix firstboot slot brick (shutdown-after-finalize race). When
   ostree-finalize-staged swaps the bootversion at shutdown and prunes the OLD

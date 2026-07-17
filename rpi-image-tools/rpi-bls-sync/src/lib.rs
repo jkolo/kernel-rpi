@@ -261,16 +261,25 @@ pub fn run() -> i32 {
                 }
             };
 
-            // NEW capabilities (no bash equivalent): config.txt followkernel
-            // directive + DTB/overlays/GPU firmware, kept in step with the
-            // kernel being synced. UNVERIFIED against a real deployment
-            // filesystem layout (plan open question #1/#2) — best-effort,
-            // skips gracefully rather than failing the whole sync if a
-            // source path isn't where expected.
+            // config.txt followkernel directive, kept in step with the kernel
+            // being synced. Source = the EFI partition's OWN config.txt via the
+            // RESOLVED mount (`fs`), never a raw absolute path: `/boot/efi/…`
+            // is context-ambiguous — before /boot is unmounted it's an empty
+            // mountpoint stub, and during late shutdown (after /boot unmounts)
+            // it resolves to the DEPLOYMENT's pristine copy, which is missing
+            // the build-time directive. Reading that pristine copy + the old
+            // substring presence check clobbered the FAT without a directive
+            // → firmware booted the kernel with no initramfs → VFS panic
+            // (cp-jurek brick, 2026-07-17). Mount-discipline rule: every read
+            // and write goes through a partition that resolve_mount() has
+            // verified mounted (temp-mounting and unmounting if needed).
             let mut small_files: Vec<PendingWrite> = Vec::new();
-            let config_txt_new = std::fs::read_to_string("/boot/efi/config.txt")
-                .ok()
+            let config_txt_new = fs
+                .read_to_string("config.txt")
                 .map(|c| config_txt::ensure_followkernel(&c));
+            if config_txt_new.is_none() {
+                eprintln!("rpi-bls-sync: no config.txt on EFI partition — leaving as-is");
+            }
             if let Some(ref content) = config_txt_new {
                 small_files.push(PendingWrite::Small {
                     dest: "config.txt",

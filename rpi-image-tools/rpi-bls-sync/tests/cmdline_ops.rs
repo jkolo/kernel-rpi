@@ -78,3 +78,17 @@ fn strip_clock_is_noop_when_absent() {
         "root=/dev/mapper/root console=ttyS0"
     );
 }
+
+#[test]
+fn dedup_flattens_newlines_from_cmdline_d() {
+    // Regression: /etc/cmdline.d/*.conf contents keep their trailing
+    // newlines when concatenated into the assembled cmdline. cmdline.txt
+    // then ends up MULTI-LINE and RPi firmware reads only the first line —
+    // console= and systemd.clock_usec= were silently dropped fleet-wide.
+    // Bash ground truth flattened newlines (tr ' ' '\n' | awk | tr '\n' ' ');
+    // the port must too.
+    assert_eq!(
+        dedup_tokens("root=/dev/sda rd.neednet=1\n console=tty1 console=ttyAMA10,115200\n"),
+        "root=/dev/sda rd.neednet=1 console=tty1 console=ttyAMA10,115200"
+    );
+}

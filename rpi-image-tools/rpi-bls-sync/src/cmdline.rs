@@ -32,16 +32,16 @@ pub fn expand_firstboot(bls_options: &str, firstboot: bool) -> String {
 /// Mirrors: `tr ' ' '\n' | awk 'NF && !seen[$0]++' | tr '\n' ' ' | sed 's/ $//'`.
 /// NOT sort -u, NOT dedup-by-key — distinct `console=` values and their
 /// order are preserved (last `console=` remains the primary device).
+///
+/// Splits on ALL whitespace, not just spaces: /etc/cmdline.d/*.conf contents
+/// carry trailing newlines into the assembled string, and a space-only split
+/// leaves them embedded in tokens → multi-line cmdline.txt, of which RPi
+/// firmware reads only the FIRST line (console= and clock were dropped).
+/// The bash ground truth flattened newlines too (awk record processing).
 pub fn dedup_tokens(cmdline: &str) -> String {
     let mut seen = std::collections::HashSet::new();
     let mut out = Vec::new();
-    for tok in cmdline.split(' ') {
-        // awk `NF` is false (0 fields) for an empty line — split(' ') on
-        // e.g. "a  b" yields an empty "" token between the two spaces,
-        // which must be dropped just like a blank awk record.
-        if tok.is_empty() {
-            continue;
-        }
+    for tok in cmdline.split_whitespace() {
         if seen.insert(tok) {
             out.push(tok);
         }

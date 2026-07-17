@@ -1,7 +1,10 @@
 # Raspberry Pi 5 Boot Configuration
 # Direct kernel boot (no UEFI/GRUB chain — RPi5 firmware does not include UEFI).
 # build-all-node-disks.sh post_process_efi places kernel_2712.img + initramfs.img
-# on this EFI partition and appends `initramfs initramfs.img followkernel` here.
+# on this EFI partition and appends the initramfs followkernel directive here.
+# (Directive string deliberately not quoted verbatim in comments — rpi-bls-sync
+# detects its presence and older builds used a substring match that a quoted
+# comment satisfied, clobbering the FAT config.txt without a real directive.)
 # RPi5 firmware then loads kernel directly with cmdline.txt.
 #
 # BOOT_ORDER is baked into pieeprom.upd at container-build time
