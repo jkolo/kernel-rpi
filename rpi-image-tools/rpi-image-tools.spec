@@ -33,7 +33,7 @@
 
 Name:           rpi-image-tools
 Version:        1.1.0
-Release:        3%{?dist}
+Release:        5%{?dist}
 Summary:        RHCOS image tooling for Raspberry Pi (BLS sync, EEPROM, firmware config)
 
 License:        GPLv2+
@@ -144,6 +144,37 @@ install -D -m 0644 /boot/efi/config-rpi4.txt /boot/efi/config.txt
 /boot/efi/config-rpi4.txt
 
 %changelog
+* Sun Jul 19 2026 Jerzy Kołosowski <jurek@kolosowscy.pl> - 1.1.0-5
+- rpi-bls-sync: EFI-stub brick fix. locate_efi no longer trusts an existing
+  /boot/efi mountpoint by presence alone — on RHCOS-RPi that can be an empty
+  read-only stub (the deployment's own /boot/efi via composefs, or an early
+  pre-FAT bind) instead of the real EFI-SYSTEM FAT. Trusting the stub made
+  reads return nothing and writes hit EACCES, so the FAT was SILENTLY never
+  updated → a dead ostree slot in cmdline.txt after the BLS swap → next-boot
+  brick (confirmed canary). Now the backing device is compared to the
+  EFI-SYSTEM PARTLABEL (parse_mount_device/efi_mount_is_real_fat); a non-FAT
+  stub routes to a PARTLABEL temp-mount, and a genuinely missing EFI-SYSTEM
+  fails LOUD (exit 1) instead of masquerading as a successful no-op sync.
+- rpi-bls-sync: sync DTBs + overlays to the FAT, coupled to the kernel being
+  synced. Firstboot seeds the device-tree via build-node-disks.sh but the
+  runtime sync only ever touched kernel/initramfs/config.txt/cmdline — a
+  day-2 kernel bump shipping new DTBs would leave the FAT with the OLD
+  device-tree. Source is the SAME deployment as the kernel
+  (`src_kernel.parent()/dtb/{broadcom,overlays}`, verified a sibling of the
+  vmlinuz on a live node). Fail-closed: unsupported model or a missing dtb
+  dir skips (pre-1.1.0-5 behaviour); a source read error aborts BEFORE the
+  cmdline.txt commit so the last-good pointer is preserved. Idempotent by
+  size — an in-sync node reads and writes nothing. GPU firmware (rpi4
+  start4.elf/…) is intentionally not runtime-synced: it lives outside the
+  per-deployment dtb dir and is firmware- not kernel-coupled. NOTE: the
+  overlay sync is add/update-only — a bump that REMOVES an overlay leaves the
+  stale .dtbo on the FAT (harmless unless config.txt still references it).
+- rpi-bls-sync-shutdown.service: added After=ostree-finalize-staged.service.
+  The authoritative day-2 sync point is the ExecStopPost drop-in (runs after
+  the boot.N swap); this makes the fallback unit's ordering explicit. No
+  behaviour change — liveness-first slot resolution already kept the FAT
+  correct in either order; this removes the ambiguity and guards against
+  future regressions.
 * Fri Jul 17 2026 Jerzy Kołosowski <jurek@kolosowscy.pl> - 1.1.0-3
 - rpi-bls-sync: config.txt clobber fix (cp-jurek brick 2026-07-17). The
   followkernel presence check is now LINE-anchored (trimmed, non-comment

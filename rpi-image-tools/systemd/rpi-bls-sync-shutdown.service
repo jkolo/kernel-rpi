@@ -11,6 +11,14 @@ Before=reboot.target
 # re-sync bieżącego BLS→EFI bez błędu. Sync przy shutdown działa jak dotąd.
 After=local-fs.target
 RequiresMountsFor=/usr
+# Autorytatywnym punktem sync przy day-2 finalize jest ExecStopPost drop-inu
+# ostree-finalize-staged (10-rpi-bls-sync.conf) — biegnie PO swapie boot.N,
+# więc zapisuje poprawny slot. Ta jednostka to fallback. After= czyni tę
+# kolejność jawną: gdy oba biegną przy shutdownie, ExecStopPost może domknąć
+# stan po nas; a gdyby ta jednostka biegła po finalize, slot.rs (liveness-first,
+# przypadek "shutdown-after-finalize") i tak utrzyma poprawny slot. Zero zmiany
+# zachowania — zdejmuje dwuznaczność i chroni przed przyszłym regresem.
+After=ostree-finalize-staged.service
 ConditionPathIsDirectory=/proc/device-tree
 
 [Service]

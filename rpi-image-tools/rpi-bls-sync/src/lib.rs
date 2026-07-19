@@ -60,6 +60,17 @@ fn resolve_mount(
                 .iter()
                 .find_map(|label| mounts::partlabel_device(label))
             else {
+                // The EFI mount is the only writable one. A missing EFI-SYSTEM
+                // FAT is a brick-class condition, not a benign skip: fail LOUD
+                // (exit 1 → visible in journal+console) rather than exit 0,
+                // which would masquerade as a successful no-op sync.
+                if writable {
+                    eprintln!(
+                        "rpi-bls-sync: EFI-SYSTEM FAT partition not found ({}) — refusing to sync",
+                        partlabel_candidates.join(" or ")
+                    );
+                    return Err(1);
+                }
                 eprintln!(
                     "rpi-bls-sync: partition not found ({}), skipping",
                     partlabel_candidates.join(" or ")
@@ -142,6 +153,47 @@ fn clock_usec_now() -> u64 {
         .unwrap_or(0)
 }
 
+/// Enumerate the firmware files (model DTBs + all overlays) present in the
+/// deployment's `<bootcsum>/dtb/` dir, returning each as a
+/// `(FirmwareFile, source_path)` pair so the planner can decide which need
+/// copying and the caller can read only those. Missing subdirs yield an empty
+/// list (fail-closed → skip the firmware sync entirely). VERIFIED source
+/// layout (live w1-jurek 2026-07-19): `<bootcsum>/dtb/broadcom/bcm27xx*.dtb`
+/// and `<bootcsum>/dtb/overlays/*.dtbo`, a sibling of the synced vmlinuz.
+/// GPU firmware (rpi4 start4.elf/…) is deliberately NOT synced here: it lives
+/// outside the per-deployment dtb dir and is firmware-version- (not kernel-)
+/// coupled, so build-time seeding suffices.
+pub fn collect_firmware_sources(
+    dtb_dir: &Path,
+    model: model::KernelName,
+) -> Vec<(firmware::FirmwareFile, PathBuf)> {
+    let mut out = Vec::new();
+    let mut collect = |subdir: &str, keep: &dyn Fn(&str) -> bool, dest_prefix: &str| {
+        let Ok(read_dir) = std::fs::read_dir(dtb_dir.join(subdir)) else {
+            return;
+        };
+        for entry in read_dir.flatten() {
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else { continue };
+            if !keep(name) {
+                continue;
+            }
+            let Ok(meta) = entry.metadata() else { continue };
+            if !meta.is_file() {
+                continue;
+            }
+            out.push((
+                firmware::FirmwareFile::new(format!("{dest_prefix}{name}"), meta.len()),
+                entry.path(),
+            ));
+        }
+    };
+    // DTBs land at the EFI root; overlays under EFI `overlays/`.
+    collect("broadcom", &|n| firmware::dtb_matches(model, n), "");
+    collect("overlays", &|n| n.ends_with(".dtbo"), "overlays/");
+    out
+}
+
 /// Orchestration entry point. Returns the process exit code.
 pub fn run() -> i32 {
     let model_raw = std::fs::read_to_string("/proc/device-tree/model").unwrap_or_default();
@@ -193,9 +245,12 @@ pub fn run() -> i32 {
         .map(|t| slot_dir_present(&t))
         .unwrap_or([false, false]);
 
+    // NB: unlike locate_boot, these bools are "is the REAL EFI-SYSTEM FAT",
+    // not "is a mountpoint" — an empty /boot/efi stub must NOT be trusted
+    // (silent-stub-write brick). See mounts::locate_efi / efi_mount_is_real_fat.
     let efi_existing = mounts::locate_efi(
-        mounts::is_mountpoint(Path::new("/boot/efi")),
-        mounts::is_mountpoint(Path::new("/sysroot/boot/efi")),
+        mounts::efi_mount_is_real_fat(Path::new("/boot/efi")),
+        mounts::efi_mount_is_real_fat(Path::new("/sysroot/boot/efi")),
     );
     let (efi_mount, _efi_guard) = match resolve_mount(
         efi_existing,
@@ -261,6 +316,47 @@ pub fn run() -> i32 {
                 }
             };
 
+            // Firmware (DTB + overlays) sync — keep the FAT device-tree coupled
+            // to the kernel being synced. Firstboot seeds DTBs via
+            // build-node-disks.sh but the runtime sync never touched them, so a
+            // day-2 kernel bump that ships new DTBs would leave the FAT with the
+            // OLD device-tree. Source = the SAME deployment as the kernel:
+            // `src_kernel.parent()/dtb/` (VERIFIED sibling of the vmlinuz on a
+            // live node). Fail-closed on every axis: unsupported model or a
+            // missing dtb dir → skip (degrades to pre-firmware.rs behavior); a
+            // source read error → abort BEFORE the cmdline.txt commit so the
+            // last-good pointer is preserved, never a half-written device-tree.
+            // Idempotent by size (plan_firmware_copies): an in-sync node reads
+            // and writes nothing.
+            let mut fw_bytes: Vec<(String, Vec<u8>)> = Vec::new();
+            if let (Ok(fw_model), Some(bootcsum_dir)) =
+                (model::parse_model(&model_raw), src_kernel.parent())
+            {
+                let sources = collect_firmware_sources(&bootcsum_dir.join("dtb"), fw_model);
+                let files: Vec<firmware::FirmwareFile> =
+                    sources.iter().map(|(f, _)| f.clone()).collect();
+                for needed in firmware::plan_firmware_copies(&files, |d| fs.file_size(d)) {
+                    let Some((_, src_path)) =
+                        sources.iter().find(|(ff, _)| ff.dest == needed.dest)
+                    else {
+                        continue;
+                    };
+                    match std::fs::read(src_path) {
+                        Ok(b) => fw_bytes.push((needed.dest.clone(), b)),
+                        Err(e) => {
+                            eprintln!("rpi-bls-sync: read firmware {}: {e}", src_path.display());
+                            return 1;
+                        }
+                    }
+                }
+                if !fw_bytes.is_empty() {
+                    eprintln!(
+                        "rpi-bls-sync: {} DTB/overlay file(s) need sync",
+                        fw_bytes.len()
+                    );
+                }
+            }
+
             // config.txt followkernel directive, kept in step with the kernel
             // being synced. Source = the EFI partition's OWN config.txt via the
             // RESOLVED mount (`fs`), never a raw absolute path: `/boot/efi/…`
@@ -284,6 +380,14 @@ pub fn run() -> i32 {
                 small_files.push(PendingWrite::Small {
                     dest: "config.txt",
                     contents: content.as_bytes(),
+                });
+            }
+            // DTBs/overlays share the small-file atomic path (write-tmp→fsync
+            // →rename); like config.txt they land BEFORE the cmdline.txt commit.
+            for (dest, bytes) in &fw_bytes {
+                small_files.push(PendingWrite::Small {
+                    dest: dest.as_str(),
+                    contents: bytes,
                 });
             }
 
